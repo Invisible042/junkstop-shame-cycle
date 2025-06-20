@@ -1,0 +1,153 @@
+Here's your **updated and final Replit prompt for building the JunkStop MVP**, now including **optional calorie tracking** via manual input — optimized for handoff or direct use with a Replit AI agent or developer.
+
+---
+
+# 🚧 Replit Build Prompt – JunkStop MVP (Updated)
+
+## 🧠 App Summary
+
+**JunkStop** is a mobile-first web app that helps users quit junk food using psychology: photo logging, guilt/regret ratings, streak tracking, and motivational AI messages. Users build clean streaks and break bad eating habits through emotional and data-driven accountability.
+
+---
+
+## ✅ Current Status
+
+* ✅ Frontend UI built via Lovable and imported to Replit
+* 🛠 Now continue **backend logic, database integration, AI response system**, and calorie logging
+
+---
+
+## 🎯 Core Features to Complete in Replit
+
+### 1. **User Authentication**
+
+* Use **Firebase Auth** or **Supabase Auth**
+* Email + password login/signup
+
+---
+
+### 2. **Photo Logging System**
+
+* Upload or capture junk food photo
+* Input after photo:
+
+  * Slider: **“How guilty do you feel?”** (1–10)
+  * Slider: **“How much do you regret this?”** (1–10)
+  * **Manual calorie estimate** (dropdown: `200`, `500`, `800`, `1200+`)
+  * Optional cost input (e.g., `₦500`, `$3.99`)
+* Store:
+
+  * `photo_url`, `timestamp`, `location` (if available), `guilt_rating`, `regret_rating`, `estimated_calories`, `estimated_cost`
+
+---
+
+### 3. **Streak Tracking System**
+
+* Calculate “Days Since Last Junk Food”
+* Update:
+
+  * `current_streak` (reset when new log)
+  * `best_streak`
+* When user logs junk food:
+
+  * Show "Streak Broken" animation/message
+* On new clean day:
+
+  * Show "Day X Clean" celebration
+
+---
+
+### 4. **Shame-to-Pride Dashboard**
+
+* Weekly average of guilt/regret
+* Cumulative:
+
+  * Junk calories eaten this week
+  * Money wasted (sum of user inputs)
+* Photo timeline (“Wall of Shame”)
+* Charts: guilt/regret trend (basic bar or line)
+
+---
+
+### 5. **AI Motivation Message (OpenRouter API)**
+
+After each log, call OpenRouter to send a tough-love motivational message.
+
+```js
+const generateMotivation = async (userPattern) => {
+  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model: "meta-llama/llama-3.1-8b-instruct:free",
+      messages: [
+        {
+          role: "system", 
+          content: "You are a tough-love junk food coach. Be blunt but supportive."
+        },
+        {
+          role: "user", 
+          content: `User has eaten junk food ${userPattern.frequency} times this week. Their average guilt is ${userPattern.avgGuilt}/10. Give a strong motivational message.`
+        }
+      ]
+    })
+  });
+  return response.json();
+};
+```
+
+---
+
+### 6. **Database Schema (Firebase or Supabase)**
+
+```sql
+Users:
+  id, email, name, current_streak, best_streak, total_guilt_score
+
+JunkFoodLogs:
+  id, user_id, photo_url, guilt_rating, regret_rating, estimated_cost, estimated_calories, location, timestamp
+
+AIInsights:
+  id, user_id, insight_text, created_at
+```
+
+---
+
+## 📱 Stack to Use
+
+| Layer         | Tech                           |
+| ------------- | ------------------------------ |
+| Frontend      | React (Lovable export)         |
+| Backend       | Firebase or Supabase           |
+| Auth          | Firebase Auth or Supabase Auth |
+| Image Storage | Firebase Storage or Cloudinary |
+| Hosting       | Replit (dev), Vercel (prod)    |
+| AI            | OpenRouter (Llama 3.1 free)    |
+
+---
+
+## 🧪 Optional Next Steps After MVP
+
+* Invite accountability partner
+* Community confession board
+* Weekly summary report
+* Gamified badges
+
+---
+
+## 🚀 Success Criteria for MVP
+
+* User can:
+
+  * Sign in
+  * Upload photo
+  * Log guilt/regret + calories
+  * View streak and shame dashboard
+  * Receive AI motivation message after logging
+
+---
+
+You can now pass this to Replit (via their AI agent or an embedded team) to continue building out the MVP backend and integrations. Would you like a `.md` or `.txt` version of this for upload or copy-paste?
