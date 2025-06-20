@@ -1,10 +1,14 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
+import { auth } from '../config/firebase';
+import { firebaseService } from '../services/firebaseService';
 
 interface User {
   id: string;
   email: string;
   displayName?: string;
+  firebaseUser?: FirebaseUser;
 }
 
 interface AuthContextType {
@@ -22,49 +26,49 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadStoredAuth();
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      if (firebaseUser) {
+        const user: User = {
+          id: firebaseUser.uid,
+          email: firebaseUser.email || '',
+          displayName: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
+          firebaseUser,
+        };
+        setUser(user);
+      } else {
+        setUser(null);
+      }
+      setLoading(false);
+    });
+
+    return unsubscribe;
   }, []);
 
-  const loadStoredAuth = async () => {
+  const signIn = async (email: string, password: string) => {
     try {
-      const storedUser = await AsyncStorage.getItem('user');
-      if (storedUser) {
-        setUser(JSON.parse(storedUser));
-      }
-    } catch (error) {
-      console.error('Error loading stored auth:', error);
-    } finally {
-      setLoading(false);
+      await firebaseService.signIn(email, password);
+      // User state will be updated by onAuthStateChanged
+    } catch (error: any) {
+      throw new Error(error.message);
     }
   };
 
-  const signIn = async (email: string, password: string) => {
-    // For demo purposes, simulate authentication
-    const mockUser: User = {
-      id: Date.now().toString(),
-      email,
-      displayName: email.split('@')[0],
-    };
-    
-    await AsyncStorage.setItem('user', JSON.stringify(mockUser));
-    setUser(mockUser);
-  };
-
   const signUp = async (email: string, password: string) => {
-    // For demo purposes, simulate registration
-    const mockUser: User = {
-      id: Date.now().toString(),
-      email,
-      displayName: email.split('@')[0],
-    };
-    
-    await AsyncStorage.setItem('user', JSON.stringify(mockUser));
-    setUser(mockUser);
+    try {
+      await firebaseService.signUp(email, password, email.split('@')[0]);
+      // User state will be updated by onAuthStateChanged
+    } catch (error: any) {
+      throw new Error(error.message);
+    }
   };
 
   const signOut = async () => {
-    await AsyncStorage.removeItem('user');
-    setUser(null);
+    try {
+      await firebaseService.signOut();
+      // User state will be updated by onAuthStateChanged
+    } catch (error: any) {
+      throw new Error(error.message);
+    }
   };
 
   return (

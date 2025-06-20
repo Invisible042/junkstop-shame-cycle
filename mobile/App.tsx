@@ -14,6 +14,7 @@ import CommunityScreen from './src/screens/CommunityScreen';
 import AuthScreen from './src/screens/AuthScreen';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { DataProvider } from './src/context/DataContext';
+import { useNotifications } from './src/hooks/useNotifications';
 
 const Tab = createBottomTabNavigator();
 
@@ -63,6 +64,7 @@ function MainTabs() {
 
 function AppContent() {
   const { user, loading } = useAuth();
+  useNotifications(); // Initialize notification handling
 
   if (loading) {
     return null; // Could add a loading screen here

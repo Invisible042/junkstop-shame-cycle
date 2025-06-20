@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { firebaseService } from '../services/firebaseService';
+import { useAuth } from './AuthContext';
 
 export interface JunkFoodLog {
   id: string;
@@ -39,14 +41,39 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [currentStreak, setCurrentStreak] = useState(0);
   const [bestStreak, setBestStreak] = useState(0);
   const [loading, setLoading] = useState(true);
+  const { user } = useAuth();
 
   useEffect(() => {
-    loadStoredData();
-  }, []);
+    if (user) {
+      loadUserData();
+    } else {
+      loadStoredData(); // Fallback to local storage
+    }
+  }, [user]);
 
   useEffect(() => {
     calculateStreak();
   }, [logs]);
+
+  const loadUserData = async () => {
+    if (!user) return;
+    
+    try {
+      const userLogs = await firebaseService.getUserLogs(user.id);
+      setLogs(userLogs);
+      
+      const storedBestStreak = await AsyncStorage.getItem(`bestStreak_${user.id}`);
+      if (storedBestStreak) {
+        setBestStreak(parseInt(storedBestStreak));
+      }
+    } catch (error) {
+      console.error('Error loading user data:', error);
+      // Fallback to local storage
+      await loadStoredData();
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const loadStoredData = async () => {
     try {
@@ -92,25 +119,52 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   };
 
   const addLog = async (logData: Omit<JunkFoodLog, 'id' | 'timestamp'>) => {
-    const newLog: JunkFoodLog = {
-      ...logData,
-      id: Date.now().toString(),
-      timestamp: Date.now(),
-    };
+    if (!user) {
+      // Fallback to local storage for demo
+      const newLog: JunkFoodLog = {
+        ...logData,
+        id: Date.now().toString(),
+        timestamp: Date.now(),
+      };
 
-    const newLogs = [...logs, newLog];
-    setLogs(newLogs);
+      const newLogs = [...logs, newLog];
+      setLogs(newLogs);
 
-    // Update best streak if current streak was better
-    if (currentStreak > bestStreak) {
-      setBestStreak(currentStreak);
-      await saveData(newLogs, currentStreak);
-    } else {
-      await saveData(newLogs);
+      if (currentStreak > bestStreak) {
+        setBestStreak(currentStreak);
+        await saveData(newLogs, currentStreak);
+      } else {
+        await saveData(newLogs);
+      }
+
+      setCurrentStreak(0);
+      return;
     }
 
-    // Reset current streak to 0 since we just logged junk food
-    setCurrentStreak(0);
+    try {
+      const logId = await firebaseService.addJunkFoodLog(logData, user.id);
+      
+      const newLog: JunkFoodLog = {
+        ...logData,
+        id: logId,
+        timestamp: Date.now(),
+      };
+
+      const newLogs = [...logs, newLog];
+      setLogs(newLogs);
+
+      // Update best streak if current streak was better
+      if (currentStreak > bestStreak) {
+        setBestStreak(currentStreak);
+        await AsyncStorage.setItem(`bestStreak_${user.id}`, currentStreak.toString());
+      }
+
+      // Reset current streak to 0 since we just logged junk food
+      setCurrentStreak(0);
+    } catch (error) {
+      console.error('Error adding log:', error);
+      throw error;
+    }
   };
 
   const getWeekStats = () => {

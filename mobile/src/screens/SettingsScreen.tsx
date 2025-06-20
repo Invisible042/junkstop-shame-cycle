@@ -16,6 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
+import { notificationService } from '../services/notificationService';
 
 interface SettingsScreenProps {
   onClose: () => void;
@@ -27,6 +28,49 @@ export default function SettingsScreen({ onClose }: SettingsScreenProps) {
   
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [locationEnabled, setLocationEnabled] = useState(true);
+
+  useEffect(() => {
+    loadSettings();
+  }, []);
+
+  const loadSettings = async () => {
+    try {
+      const notifications = await AsyncStorage.getItem('notificationsEnabled');
+      const location = await AsyncStorage.getItem('locationEnabled');
+      
+      if (notifications !== null) {
+        setNotificationsEnabled(JSON.parse(notifications));
+      }
+      if (location !== null) {
+        setLocationEnabled(JSON.parse(location));
+      }
+    } catch (error) {
+      console.error('Error loading settings:', error);
+    }
+  };
+
+  const handleNotificationToggle = async (value: boolean) => {
+    setNotificationsEnabled(value);
+    await AsyncStorage.setItem('notificationsEnabled', JSON.stringify(value));
+    
+    if (value) {
+      const hasPermission = await notificationService.requestPermissions();
+      if (hasPermission) {
+        await notificationService.scheduleDailyReminder();
+      } else {
+        Alert.alert('Permission Required', 'Please enable notifications in your device settings to receive reminders.');
+        setNotificationsEnabled(false);
+        await AsyncStorage.setItem('notificationsEnabled', 'false');
+      }
+    } else {
+      await notificationService.cancelAllNotifications();
+    }
+  };
+
+  const handleLocationToggle = async (value: boolean) => {
+    setLocationEnabled(value);
+    await AsyncStorage.setItem('locationEnabled', JSON.stringify(value));
+  };
   const [showDataModal, setShowDataModal] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [newDisplayName, setNewDisplayName] = useState(user?.displayName || '');
@@ -114,7 +158,7 @@ export default function SettingsScreen({ onClose }: SettingsScreenProps) {
           subtitle: 'Daily reminders and streak alerts',
           toggle: true,
           value: notificationsEnabled,
-          onToggle: setNotificationsEnabled,
+          onToggle: handleNotificationToggle,
         },
         {
           icon: 'location-outline',
@@ -122,7 +166,7 @@ export default function SettingsScreen({ onClose }: SettingsScreenProps) {
           subtitle: 'Track where you eat junk food',
           toggle: true,
           value: locationEnabled,
-          onToggle: setLocationEnabled,
+          onToggle: handleLocationToggle,
         },
       ],
     },
