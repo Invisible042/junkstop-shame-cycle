@@ -1,0 +1,148 @@
+Here’s the **final update** to your prompt — now tailored for **React Native + Expo**, transitioning from web to mobile.
+
+---
+
+# 📲 Final JunkStop MVP Build Prompt – React Native + Expo Version
+
+## 🧠 App Summary
+
+**JunkStop** is a mobile app that helps users break junk food habits through **photo logging**, **shame-based ratings**, **streak tracking**, and **motivational AI feedback**. It leverages behavioral psychology to build better habits.
+
+---
+
+## ✅ Status
+
+* UI mockup originally built for web (via Lovable)
+* Need to **port UI to React Native (Expo)** and complete:
+
+  * Backend logic
+  * Image + location handling
+  * AI coaching integration
+  * Firebase or Supabase backend
+
+---
+
+## 🎯 React Native MVP Features
+
+### 1. **User Authentication**
+
+* Use **Firebase Auth**
+* Email/password signup and login
+
+---
+
+### 2. **Photo Logging System**
+
+* 📷 Use `expo-image-picker` or `expo-camera`
+* After photo:
+
+  * Slider (or picker): **Guilt (1–10)**
+  * Slider (or picker): **Regret (1–10)**
+  * Dropdown (or slider): **Estimated Calories** (`200`, `500`, `800`, `1200+`)
+  * Optional: Cost input (`$`, `₦`)
+* Save to Firebase:
+
+  * `photo_url`, `timestamp`, `location`, `guilt_rating`, `regret_rating`, `estimated_calories`, `estimated_cost`
+
+---
+
+### 3. **Streak System**
+
+* Store `last_junk_log_date` in DB
+* Calculate streak as: days since that date
+* Track `best_streak`
+* Reset streak when new junk food photo is logged
+* Animated "Streak Broken" screen using Expo animations or Lottie
+
+---
+
+### 4. **Dashboard**
+
+* Show:
+
+  * Clean streak counter
+  * Avg guilt/regret this week
+  * Total junk food calories this week
+  * Total money wasted
+  * Scrollable “Wall of Shame” (past photos with ratings)
+
+---
+
+### 5. **AI Motivation Message (OpenRouter)**
+
+After logging junk food, call OpenRouter to fetch motivational message.
+
+✅ Use `fetch` in Expo, example:
+
+```js
+const generateMotivation = async (userPattern) => {
+  const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      model: "meta-llama/llama-3.1-8b-instruct:free",
+      messages: [
+        { role: "system", content: "You are a tough-love junk food coach." },
+        { role: "user", content: `User ate junk food ${userPattern.frequency} times this week, avg guilt ${userPattern.avgGuilt}/10. Give a motivational message.` }
+      ]
+    })
+  });
+  const data = await res.json();
+  return data.choices[0].message.content;
+};
+```
+
+---
+
+## 📦 Tech Stack
+
+| Layer         | Tech                             |
+| ------------- | -------------------------------- |
+| App Platform  | **React Native (Expo)**          |
+| Auth          | Firebase Auth                    |
+| Storage       | Firebase Storage (photo uploads) |
+| Database      | Firestore or Supabase            |
+| Location      | `expo-location`                  |
+| AI            | OpenRouter API                   |
+| Notifications | Expo Push Notifications          |
+
+---
+
+## 🔧 Required Expo Packages
+
+```bash
+npx expo install expo-camera expo-image-picker expo-location react-native-maps
+npx expo install @react-native-firebase/app @react-native-firebase/auth @react-native-firebase/firestore
+npx expo install react-native-chart-kit react-native-animatable lottie-react-native
+```
+
+---
+
+## 🧪 Optional for Post-MVP
+
+* Accountability partner (via email invite)
+* Anonymous confessions (Firebase feed)
+* Weekly AI reports
+* Gamification (achievements, badges, leaderboard)
+
+---
+
+## ✅ Completion Criteria
+
+* User can:
+
+  * Log junk food with photo + ratings + calorie estimate
+  * Track clean days
+  * View shame dashboard
+  * Get an AI-generated motivation message after each log
+
+---
+
+Let me know if you'd like:
+
+* A `.md` or `.txt` version of this to upload into Replit or Lovable
+* UI-to-React Native component translation for any specific screens
+* A complete Expo boilerplate to get started fast

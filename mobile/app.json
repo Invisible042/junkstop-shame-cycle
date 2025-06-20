@@ -1,0 +1,51 @@
+{
+  "expo": {
+    "name": "JunkStop",
+    "slug": "junkstop",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      }
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow JunkStop to access your camera to take photos of junk food."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "The app accesses your photos to let you select junk food images."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationForegroundPermission": "Allow JunkStop to use your location to track where you eat junk food.",
+          "locationBackgroundPermission": "Allow JunkStop to use your location to track where you eat junk food."
+        }
+      ]
+    ]
+  }
+}
