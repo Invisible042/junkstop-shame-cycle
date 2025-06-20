@@ -43,35 +43,7 @@ export default {
     web: {
       favicon: "./assets/favicon.png"
     },
-    plugins: [
-      [
-        "expo-camera",
-        {
-          cameraPermission: "Allow JunkStop to access your camera to take photos of junk food for tracking your habits."
-        }
-      ],
-      [
-        "expo-image-picker",
-        {
-          photosPermission: "Allow JunkStop to access your photos to select junk food images for habit tracking."
-        }
-      ],
-      [
-        "expo-location",
-        {
-          locationForegroundPermission: "Allow JunkStop to use your location to track where you eat junk food for better insights.",
-          locationBackgroundPermission: "Allow JunkStop to use your location to track eating patterns and provide contextual insights."
-        }
-      ],
-      [
-        "expo-notifications",
-        {
-          icon: "./assets/notification-icon.png",
-          color: "#8B5CF6",
-          defaultChannel: "default"
-        }
-      ]
-    ],
+    plugins: [],
     extra: {
       eas: {
         projectId: "your-eas-project-id"

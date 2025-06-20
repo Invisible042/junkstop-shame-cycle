@@ -13,8 +13,8 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import * as ImagePicker from 'expo-image-picker';
-import * as Location from 'expo-location';
+// import * as ImagePicker from 'expo-image-picker';
+// import * as Location from 'expo-location';
 import Slider from 'react-native-slider';
 import Toast from 'react-native-toast-message';
 import * as Animatable from 'react-native-animatable';
@@ -37,41 +37,17 @@ export default function LogScreen() {
   const { addLog, currentStreak, getWeekStats } = useData();
 
   const takePhoto = async () => {
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission needed', 'Camera permission is required to take photos.');
-      return;
-    }
-
-    const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.8,
-    });
-
-    if (!result.canceled) {
-      setPhoto(result.assets[0].uri);
-    }
+    // Mock photo capture for development
+    const mockPhotoUri = 'https://via.placeholder.com/400x300/ff6b6b/ffffff?text=Junk+Food+Photo';
+    setPhoto(mockPhotoUri);
+    Alert.alert('Photo Captured', 'Demo photo captured for development');
   };
 
   const pickFromGallery = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission needed', 'Photo library permission is required.');
-      return;
-    }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.8,
-    });
-
-    if (!result.canceled) {
-      setPhoto(result.assets[0].uri);
-    }
+    // Mock photo selection for development
+    const mockPhotoUri = 'https://via.placeholder.com/400x300/4ecdc4/ffffff?text=Selected+Photo';
+    setPhoto(mockPhotoUri);
+    Alert.alert('Photo Selected', 'Demo photo selected for development');
   };
 
   const showImagePicker = () => {
