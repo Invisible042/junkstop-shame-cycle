@@ -54,15 +54,8 @@ const Index = () => {
     <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 flex items-center justify-center p-5">
       <div className="w-full max-w-sm h-[812px] bg-black rounded-[40px] p-2 shadow-2xl shadow-black/50">
         <div className="w-full h-full bg-gray-950/90 backdrop-blur-xl rounded-[32px] overflow-hidden relative border border-white/10">
-          <div 
-            className="flex w-[500%] h-full transition-transform duration-300 ease-out"
-            style={{ transform: `translateX(-${currentScreen * 20}%)` }}
-          >
-            {screens.map((screen, index) => (
-              <div key={index} className="w-1/5 h-full">
-                {screen}
-              </div>
-            ))}
+          <div className="w-full h-full pb-20">
+            {screens[currentScreen]}
           </div>
           
           <Navigation currentScreen={currentScreen} onScreenChange={setCurrentScreen} />
