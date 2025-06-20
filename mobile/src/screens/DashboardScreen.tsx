@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -7,18 +7,21 @@ import {
   TouchableOpacity,
   Image,
   Dimensions,
+  Modal,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
+import SettingsScreen from './SettingsScreen';
 
 const { width } = Dimensions.get('window');
 
 export default function DashboardScreen() {
   const { currentStreak, bestStreak, logs, getWeekStats } = useData();
-  const { user, signOut } = useAuth();
+  const { user } = useAuth();
+  const [showSettings, setShowSettings] = useState(false);
   const weekStats = getWeekStats();
 
   const recentLogs = logs
@@ -38,8 +41,8 @@ export default function DashboardScreen() {
               <Text style={styles.greeting}>Hello, {user?.displayName}</Text>
               <Text style={styles.subtitle}>Stay strong today</Text>
             </View>
-            <TouchableOpacity onPress={signOut} style={styles.signOutButton}>
-              <Ionicons name="log-out-outline" size={24} color="white" />
+            <TouchableOpacity onPress={() => setShowSettings(true)} style={styles.settingsButton}>
+              <Ionicons name="settings-outline" size={24} color="white" />
             </TouchableOpacity>
           </View>
 
@@ -102,6 +105,23 @@ export default function DashboardScreen() {
             </View>
           )}
 
+          {/* Motivational Quote */}
+          {currentStreak > 0 && (
+            <View style={styles.motivationCard}>
+              <Ionicons name="bulb" size={24} color="#F59E0B" />
+              <Text style={styles.motivationText}>
+                {currentStreak === 1 
+                  ? "Great start! One day clean is the foundation of success."
+                  : currentStreak < 7
+                  ? `${currentStreak} days strong! You're building real momentum.`
+                  : currentStreak < 30
+                  ? `${currentStreak} days! You're developing a powerful habit.`
+                  : `${currentStreak} days! You're a true habit master!`
+                }
+              </Text>
+            </View>
+          )}
+
           {/* Quick Actions */}
           <View style={styles.quickActions}>
             <Text style={styles.sectionTitle}>Quick Actions</Text>
@@ -116,6 +136,15 @@ export default function DashboardScreen() {
           </View>
         </ScrollView>
       </SafeAreaView>
+
+      {/* Settings Modal */}
+      <Modal
+        visible={showSettings}
+        animationType="slide"
+        presentationStyle="fullScreen"
+      >
+        <SettingsScreen onClose={() => setShowSettings(false)} />
+      </Modal>
     </LinearGradient>
   );
 }
@@ -147,7 +176,7 @@ const styles = StyleSheet.create({
     color: '#E2E8F0',
     marginTop: 4,
   },
-  signOutButton: {
+  settingsButton: {
     padding: 8,
   },
   streakCard: {
@@ -272,5 +301,22 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     marginLeft: 12,
+  },
+  motivationCard: {
+    backgroundColor: 'rgba(245, 158, 11, 0.1)',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.3)',
+  },
+  motivationText: {
+    color: 'white',
+    fontSize: 14,
+    lineHeight: 20,
+    marginLeft: 12,
+    flex: 1,
   },
 });
