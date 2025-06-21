@@ -1,4 +1,6 @@
-import { users, type User, type InsertUser, type JunkFoodLog, type InsertJunkFoodLog, type CommunityPost, type InsertCommunityPost } from "@shared/schema";
+import { users, junkFoodLogs, communityPosts, type User, type InsertUser, type JunkFoodLog, type InsertJunkFoodLog, type CommunityPost, type InsertCommunityPost } from "@shared/schema";
+import { db } from "./db";
+import { eq, desc, sql } from "drizzle-orm";
 
 export interface IStorage {
   // User operations
@@ -27,110 +29,77 @@ export interface IStorage {
   }>;
 }
 
-export class MemStorage implements IStorage {
-  private users: Map<number, User>;
-  private junkFoodLogs: Map<number, JunkFoodLog>;
-  private communityPosts: Map<number, CommunityPost>;
-  private currentUserId: number;
-  private currentLogId: number;
-  private currentPostId: number;
-
-  constructor() {
-    this.users = new Map();
-    this.junkFoodLogs = new Map();
-    this.communityPosts = new Map();
-    this.currentUserId = 1;
-    this.currentLogId = 1;
-    this.currentPostId = 1;
-  }
-
+export class DatabaseStorage implements IStorage {
   async getUser(id: number): Promise<User | undefined> {
-    return this.users.get(id);
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user || undefined;
   }
 
   async getUserByEmail(email: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.email === email,
-    );
+    const [user] = await db.select().from(users).where(eq(users.email, email));
+    return user || undefined;
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.username === username,
-    );
+    const [user] = await db.select().from(users).where(eq(users.username, username));
+    return user || undefined;
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
-    const id = this.currentUserId++;
-    const user: User = { 
-      ...insertUser, 
-      id,
-      streak_count: 0,
-      best_streak: 0,
-      total_guilt_score: "0",
-      accountability_partner_id: null,
-      ai_coaching_enabled: true,
-      created_at: new Date()
-    };
-    this.users.set(id, user);
+    const [user] = await db
+      .insert(users)
+      .values(insertUser)
+      .returning();
     return user;
   }
 
   async updateUserStreak(userId: number, streakCount: number, bestStreak: number): Promise<User> {
-    const user = this.users.get(userId);
+    const [user] = await db
+      .update(users)
+      .set({ streak_count: streakCount, best_streak: bestStreak })
+      .where(eq(users.id, userId))
+      .returning();
+    
     if (!user) {
       throw new Error("User not found");
     }
-    const updatedUser = { ...user, streak_count: streakCount, best_streak: bestStreak };
-    this.users.set(userId, updatedUser);
-    return updatedUser;
+    return user;
   }
 
   async createJunkFoodLog(log: InsertJunkFoodLog): Promise<JunkFoodLog> {
-    const id = this.currentLogId++;
-    const junkFoodLog: JunkFoodLog = {
-      id,
-      user_id: log.user_id,
-      photo_url: log.photo_url || null,
-      food_type: log.food_type,
-      guilt_rating: log.guilt_rating,
-      regret_rating: log.regret_rating,
-      estimated_cost: log.estimated_cost || "0",
-      estimated_calories: log.estimated_calories || 0,
-      location: log.location || null,
-      created_at: new Date()
-    };
-    this.junkFoodLogs.set(id, junkFoodLog);
+    const [junkFoodLog] = await db
+      .insert(junkFoodLogs)
+      .values(log)
+      .returning();
     return junkFoodLog;
   }
 
   async getUserJunkFoodLogs(userId: number, limit: number, offset: number): Promise<JunkFoodLog[]> {
-    const userLogs = Array.from(this.junkFoodLogs.values())
-      .filter(log => log.user_id === userId)
-      .sort((a, b) => (b.created_at?.getTime() || 0) - (a.created_at?.getTime() || 0))
-      .slice(offset, offset + limit);
-    return userLogs;
+    const logs = await db
+      .select()
+      .from(junkFoodLogs)
+      .where(eq(junkFoodLogs.user_id, userId))
+      .orderBy(desc(junkFoodLogs.created_at))
+      .limit(limit)
+      .offset(offset);
+    return logs;
   }
 
   async getCommunityPosts(limit: number, offset: number): Promise<CommunityPost[]> {
-    const posts = Array.from(this.communityPosts.values())
-      .sort((a, b) => (b.created_at?.getTime() || 0) - (a.created_at?.getTime() || 0))
-      .slice(offset, offset + limit);
+    const posts = await db
+      .select()
+      .from(communityPosts)
+      .orderBy(desc(communityPosts.created_at))
+      .limit(limit)
+      .offset(offset);
     return posts;
   }
 
   async createCommunityPost(post: InsertCommunityPost): Promise<CommunityPost> {
-    const id = this.currentPostId++;
-    const communityPost: CommunityPost = {
-      id,
-      user_id: post.user_id,
-      content: post.content,
-      photo_url: post.photo_url || null,
-      is_anonymous: post.is_anonymous ?? true,
-      likes_count: 0,
-      created_at: new Date()
-    };
-    this.communityPosts.set(id, communityPost);
+    const [communityPost] = await db
+      .insert(communityPosts)
+      .values(post)
+      .returning();
     return communityPost;
   }
 
@@ -142,25 +111,26 @@ export class MemStorage implements IStorage {
     totalCalories: number;
     totalSaved: number;
   }> {
-    const userLogs = Array.from(this.junkFoodLogs.values())
-      .filter(log => log.user_id === userId);
-    
-    const totalLogs = userLogs.length;
-    const avgGuiltScore = totalLogs > 0 ? userLogs.reduce((sum, log) => sum + log.guilt_rating, 0) / totalLogs : 0;
-    const avgRegretScore = totalLogs > 0 ? userLogs.reduce((sum, log) => sum + log.regret_rating, 0) / totalLogs : 0;
-    const totalCost = userLogs.reduce((sum, log) => sum + parseFloat(log.estimated_cost || "0"), 0);
-    const totalCalories = userLogs.reduce((sum, log) => sum + (log.estimated_calories || 0), 0);
-    const totalSaved = totalCost; // Assuming saved money equals what would have been spent
+    const [analytics] = await db
+      .select({
+        totalLogs: sql<number>`count(*)`,
+        avgGuiltScore: sql<number>`avg(${junkFoodLogs.guilt_rating})`,
+        avgRegretScore: sql<number>`avg(${junkFoodLogs.regret_rating})`,
+        totalCost: sql<number>`sum(${junkFoodLogs.estimated_cost}::numeric)`,
+        totalCalories: sql<number>`sum(${junkFoodLogs.estimated_calories})`,
+      })
+      .from(junkFoodLogs)
+      .where(eq(junkFoodLogs.user_id, userId));
 
     return {
-      totalLogs,
-      avgGuiltScore,
-      avgRegretScore,
-      totalCost,
-      totalCalories,
-      totalSaved
+      totalLogs: Number(analytics.totalLogs) || 0,
+      avgGuiltScore: Number(analytics.avgGuiltScore) || 0,
+      avgRegretScore: Number(analytics.avgRegretScore) || 0,
+      totalCost: Number(analytics.totalCost) || 0,
+      totalCalories: Number(analytics.totalCalories) || 0,
+      totalSaved: Number(analytics.totalCost) || 0,
     };
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new DatabaseStorage();
