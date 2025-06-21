@@ -15,18 +15,21 @@ JunkStop is a mobile-first web application designed to help users track and redu
 - **Mobile-First**: Responsive design optimized for mobile devices
 
 ### Backend Architecture
-- **Runtime**: Node.js with Express.js
-- **Language**: TypeScript with ES modules
+- **Primary Backend**: FastAPI with Python 3.11
+- **Language**: Python with async/await support
 - **API Pattern**: RESTful API with `/api` prefix
-- **Development**: Hot reload with tsx for TypeScript execution
-- **Production**: Compiled with esbuild for optimal performance
+- **Authentication**: JWT tokens with Bearer authentication
+- **File Upload**: Multipart form data with image processing
+- **AI Integration**: OpenRouter API for coaching and calorie estimation
+- **Fallback Backend**: Node.js with Express.js (for development)
 
 ### Data Storage
-- **Database**: PostgreSQL (configured via Drizzle)
-- **ORM**: Drizzle ORM with type-safe queries
-- **Migrations**: Drizzle Kit for schema management
+- **Database**: Supabase PostgreSQL (production) with local fallback
+- **Backend ORM**: Supabase Python client with direct SQL operations
+- **Frontend ORM**: Drizzle ORM with type-safe queries (for Node.js fallback)
+- **Schema Management**: Supabase dashboard and Drizzle migrations
 - **Development Storage**: In-memory storage implementation for rapid prototyping
-- **Connection**: Neon Database serverless PostgreSQL
+- **Authentication**: JWT tokens with secure password hashing
 
 ### UI Component System
 - **Base**: shadcn/ui components built on Radix UI primitives
@@ -112,7 +115,16 @@ JunkStop is a mobile-first web application designed to help users track and redu
 
 ```
 Changelog:
-- June 21, 2025. Initial setup
+- June 21, 2025. Initial setup with Node.js/Express frontend
+- June 21, 2025. Migration from Lovable to Replit completed
+- June 21, 2025. FastAPI Python backend with Supabase database integration added
+- June 21, 2025. Complete JunkStop app functionality implemented:
+  * Photo upload and junk food logging system
+  * JWT authentication with secure login/registration
+  * AI coaching integration with OpenRouter fallbacks
+  * Real-time streak tracking and guilt/regret scoring
+  * Community features and weekly analytics
+  * Mobile-first responsive design with dark theme
 ```
 
 ## User Preferences

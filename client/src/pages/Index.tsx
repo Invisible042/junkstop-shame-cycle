@@ -6,45 +6,54 @@ import ProgressScreen from '@/components/ProgressScreen';
 import ChatScreen from '@/components/ChatScreen';
 import CommunityScreen from '@/components/CommunityScreen';
 import Navigation from '@/components/Navigation';
-import { useToast } from '@/hooks/use-toast';
+import { useUserProfile, useCreateJunkFoodLog } from '@/hooks/useJunkFoodData';
+import { useAuth } from '@/hooks/useAuth';
 
 const Index = () => {
-  const { toast } = useToast();
   const [currentScreen, setCurrentScreen] = useState(0);
-  const [currentStreak, setCurrentStreak] = useState(7);
-  const [totalSaved, setTotalSaved] = useState(45);
-  const [avgGuiltScore, setAvgGuiltScore] = useState(2.3);
+  const { user } = useAuth();
+  const { data: profile, isLoading } = useUserProfile();
+  const createLogMutation = useCreateJunkFoodLog();
 
   const handleLogJunkFood = () => {
     setCurrentScreen(1);
   };
 
-  const handleSubmitLog = (data: any) => {
-    setCurrentStreak(0);
-    setAvgGuiltScore(data.guilt);
-    toast({
-      title: "💔 STREAK BROKEN!",
-      description: `You lost your ${currentStreak}-day streak. But you can start again!`,
-      variant: "destructive",
-    });
-    setCurrentScreen(0);
+  const handleSubmitLog = async (data: {
+    photo: File;
+    food_type: string;
+    guilt_rating: number;
+    regret_rating: number;
+    estimated_cost?: number;
+    location?: string;
+  }) => {
+    try {
+      await createLogMutation.mutateAsync(data);
+      setCurrentScreen(0); // Return to dashboard after successful log
+    } catch (error) {
+      console.error('Failed to submit log:', error);
+    }
   };
 
-  const handleTakePhoto = () => {
-    toast({
-      title: "📸 Photo captured",
-      description: "Rate your guilt and regret below",
-    });
-  };
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 flex items-center justify-center">
+        <div className="text-white text-xl">Loading your data...</div>
+      </div>
+    );
+  }
 
   const screens = [
     <DashboardScreen 
-      currentStreak={currentStreak}
-      totalSaved={totalSaved}
-      avgGuiltScore={avgGuiltScore}
+      currentStreak={profile?.streak_count || 0}
+      totalSaved={profile?.total_saved || 0}
+      avgGuiltScore={profile?.avg_guilt_score || 0}
       onLogJunkFood={handleLogJunkFood}
     />,
-    <LogScreen onSubmitLog={handleSubmitLog} onTakePhoto={handleTakePhoto} />,
+    <LogScreen 
+      onSubmitLog={handleSubmitLog} 
+      isSubmitting={createLogMutation.isPending}
+    />,
     <ProgressScreen />,
     <ChatScreen />,
     <CommunityScreen />
