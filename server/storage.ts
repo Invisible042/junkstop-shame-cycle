@@ -107,14 +107,14 @@ export class MemStorage implements IStorage {
   async getUserJunkFoodLogs(userId: number, limit: number, offset: number): Promise<JunkFoodLog[]> {
     const userLogs = Array.from(this.junkFoodLogs.values())
       .filter(log => log.user_id === userId)
-      .sort((a, b) => b.created_at.getTime() - a.created_at.getTime())
+      .sort((a, b) => (b.created_at?.getTime() || 0) - (a.created_at?.getTime() || 0))
       .slice(offset, offset + limit);
     return userLogs;
   }
 
   async getCommunityPosts(limit: number, offset: number): Promise<CommunityPost[]> {
     const posts = Array.from(this.communityPosts.values())
-      .sort((a, b) => b.created_at.getTime() - a.created_at.getTime())
+      .sort((a, b) => (b.created_at?.getTime() || 0) - (a.created_at?.getTime() || 0))
       .slice(offset, offset + limit);
     return posts;
   }
@@ -122,8 +122,11 @@ export class MemStorage implements IStorage {
   async createCommunityPost(post: InsertCommunityPost): Promise<CommunityPost> {
     const id = this.currentPostId++;
     const communityPost: CommunityPost = {
-      ...post,
       id,
+      user_id: post.user_id,
+      content: post.content,
+      photo_url: post.photo_url || null,
+      is_anonymous: post.is_anonymous ?? true,
       likes_count: 0,
       created_at: new Date()
     };
