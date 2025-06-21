@@ -1,78 +1,73 @@
-# JunkStop Mobile App
+# Welcome to your Lovable project
 
-A React Native + Expo mobile application for tracking junk food habits and building healthier eating patterns.
+## Project info
 
-## Quick Start
+**URL**: https://lovable.dev/projects/ce54d2c5-4fc5-424e-8837-9e8db82157b8
 
-```bash
-# Start development server (web interface)
-npm start
+## How can I edit this code?
 
-# Run on specific platforms
-npm run mobile   # QR code for mobile devices
-npm run android  # Android emulator
-npm run ios      # iOS simulator
+There are several ways of editing your application.
+
+**Use Lovable**
+
+Simply visit the [Lovable Project](https://lovable.dev/projects/ce54d2c5-4fc5-424e-8837-9e8db82157b8) and start prompting.
+
+Changes made via Lovable will be committed automatically to this repo.
+
+**Use your preferred IDE**
+
+If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+
+The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+
+Follow these steps:
+
+```sh
+# Step 1: Clone the repository using the project's Git URL.
+git clone <YOUR_GIT_URL>
+
+# Step 2: Navigate to the project directory.
+cd <YOUR_PROJECT_NAME>
+
+# Step 3: Install the necessary dependencies.
+npm i
+
+# Step 4: Start the development server with auto-reloading and an instant preview.
+npm run dev
 ```
 
-## Project Structure
+**Edit a file directly in GitHub**
 
-```
-mobile/                 # React Native + Expo app
-├── src/
-│   ├── screens/       # App screens (Dashboard, Log, Progress, etc.)
-│   ├── context/       # State management (Auth, Data)
-│   ├── services/      # External services (Firebase, AI, Notifications)
-│   ├── hooks/         # Custom React hooks
-│   └── config/        # Configuration files
-├── App.tsx            # Main app component
-├── app.config.js      # Expo configuration
-├── eas.json          # EAS build configuration
-└── package.json       # Dependencies and scripts
-```
+- Navigate to the desired file(s).
+- Click the "Edit" button (pencil icon) at the top right of the file view.
+- Make your changes and commit the changes.
 
-## Features
+**Use GitHub Codespaces**
 
-- **Photo Logging**: Camera integration for junk food tracking
-- **Streak Tracking**: Automatic clean day calculation
-- **AI Coaching**: Motivational messages based on eating patterns
-- **Progress Charts**: Visual tracking of habits over time
-- **Community**: Anonymous confessions and achievements
-- **Push Notifications**: Daily reminders and milestone celebrations
-- **Settings**: Comprehensive app configuration
+- Navigate to the main page of your repository.
+- Click on the "Code" button (green button) near the top right.
+- Select the "Codespaces" tab.
+- Click on "New codespace" to launch a new Codespace environment.
+- Edit files directly within the Codespace and commit and push your changes once you're done.
 
-## Production Setup
+## What technologies are used for this project?
 
-1. **Firebase Configuration**:
-   - Create Firebase project
-   - Enable Authentication, Firestore, and Storage
-   - Add credentials to `.env`
+This project is built with:
 
-2. **AI Integration**:
-   - Get OpenRouter API key
-   - Add to environment variables
+- Vite
+- TypeScript
+- React
+- shadcn-ui
+- Tailwind CSS
 
-3. **Build for Production**:
-   ```bash
-   npx eas build --platform all
-   ```
+## How can I deploy this project?
 
-## Environment Variables
+Simply open [Lovable](https://lovable.dev/projects/ce54d2c5-4fc5-424e-8837-9e8db82157b8) and click on Share -> Publish.
 
-Copy `mobile/.env.example` to `mobile/.env` and configure:
+## Can I connect a custom domain to my Lovable project?
 
-```
-EXPO_PUBLIC_FIREBASE_API_KEY=your_firebase_api_key
-EXPO_PUBLIC_FIREBASE_PROJECT_ID=your_project_id
-EXPO_PUBLIC_OPENROUTER_API_KEY=your_openrouter_key
-```
+Yes, you can!
 
-## MVP Status
+To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
 
-✅ Complete production-ready mobile app
-✅ Real authentication and cloud storage
-✅ AI-powered coaching system
-✅ Push notifications
-✅ Offline functionality with sync
-✅ App store ready configuration
-
-Ready for beta testing and app store submission!
+Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)

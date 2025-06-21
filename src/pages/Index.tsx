@@ -1,40 +1,75 @@
 
 import React, { useState } from 'react';
-import DashboardScreen from '../components/DashboardScreen';
-import LogScreen from '../components/LogScreen';
-import ProgressScreen from '../components/ProgressScreen';
-import ChatScreen from '../components/ChatScreen';
-import CommunityScreen from '../components/CommunityScreen';
-import Navigation from '../components/Navigation';
+import DashboardScreen from '@/components/DashboardScreen';
+import LogScreen from '@/components/LogScreen';
+import ProgressScreen from '@/components/ProgressScreen';
+import ChatScreen from '@/components/ChatScreen';
+import CommunityScreen from '@/components/CommunityScreen';
+import Navigation from '@/components/Navigation';
+import { useToast } from '@/hooks/use-toast';
 
-export default function Index() {
-  const [activeScreen, setActiveScreen] = useState(0);
+const Index = () => {
+  const { toast } = useToast();
+  const [currentScreen, setCurrentScreen] = useState(0);
+  const [currentStreak, setCurrentStreak] = useState(7);
+  const [totalSaved, setTotalSaved] = useState(45);
+  const [avgGuiltScore, setAvgGuiltScore] = useState(2.3);
+
+  const handleLogJunkFood = () => {
+    setCurrentScreen(1);
+  };
+
+  const handleSubmitLog = (data: any) => {
+    setCurrentStreak(0);
+    setAvgGuiltScore(data.guilt);
+    toast({
+      title: "💔 STREAK BROKEN!",
+      description: `You lost your ${currentStreak}-day streak. But you can start again!`,
+      variant: "destructive",
+    });
+    setCurrentScreen(0);
+  };
+
+  const handleTakePhoto = () => {
+    toast({
+      title: "📸 Photo captured",
+      description: "Rate your guilt and regret below",
+    });
+  };
 
   const screens = [
-    DashboardScreen,
-    LogScreen,
-    ProgressScreen,
-    ChatScreen,
-    CommunityScreen,
+    <DashboardScreen 
+      currentStreak={currentStreak}
+      totalSaved={totalSaved}
+      avgGuiltScore={avgGuiltScore}
+      onLogJunkFood={handleLogJunkFood}
+    />,
+    <LogScreen onSubmitLog={handleSubmitLog} onTakePhoto={handleTakePhoto} />,
+    <ProgressScreen />,
+    <ChatScreen />,
+    <CommunityScreen />
   ];
 
-  const CurrentScreen = screens[activeScreen];
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900 flex items-center justify-center p-4">
-      {/* Phone Container */}
-      <div className="w-full max-w-sm h-[800px] bg-black rounded-[40px] p-2 shadow-2xl">
-        {/* Screen */}
-        <div className="w-full h-full bg-gradient-to-br from-gray-900/50 to-black/50 rounded-[32px] overflow-hidden flex flex-col">
-          {/* Content Area */}
-          <div className="flex-1 p-4">
-            <CurrentScreen onNavigate={setActiveScreen} />
+    <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 flex items-center justify-center p-5">
+      <div className="w-full max-w-sm h-[812px] bg-black rounded-[40px] p-2 shadow-2xl shadow-black/50">
+        <div className="w-full h-full bg-gray-950/90 backdrop-blur-xl rounded-[32px] overflow-hidden relative border border-white/10">
+          <div 
+            className="flex w-[500%] h-full transition-transform duration-300 ease-out"
+            style={{ transform: `translateX(-${currentScreen * 20}%)` }}
+          >
+            {screens.map((screen, index) => (
+              <div key={index} className="w-1/5 h-full">
+                {screen}
+              </div>
+            ))}
           </div>
           
-          {/* Navigation */}
-          <Navigation activeScreen={activeScreen} onNavigate={setActiveScreen} />
+          <Navigation currentScreen={currentScreen} onScreenChange={setCurrentScreen} />
         </div>
       </div>
     </div>
   );
-}
+};
+
+export default Index;

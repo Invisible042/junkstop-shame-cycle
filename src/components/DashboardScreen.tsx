@@ -1,79 +1,55 @@
 
 import React from 'react';
-import { Camera, DollarSign, TrendingUp, Brain } from 'lucide-react';
+import { Camera, DollarSign, TrendingUp } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 interface DashboardScreenProps {
-  onNavigate: (screen: number) => void;
+  currentStreak: number;
+  totalSaved: number;
+  avgGuiltScore: number;
+  onLogJunkFood: () => void;
 }
 
-export default function DashboardScreen({ onNavigate }: DashboardScreenProps) {
-  // Mock data - in real app this would come from context/API
-  const streakData = {
-    currentStreak: 7,
-    bestStreak: 21,
-    moneySaved: 45,
-    avgGuiltScore: 2.3,
-    totalCalories: 1250
-  };
-
-  const aiInsight = "You tend to eat junk food on Fridays around 3pm. Let's prepare for tomorrow!";
-
+const DashboardScreen = ({ currentStreak, totalSaved, avgGuiltScore, onLogJunkFood }: DashboardScreenProps) => {
   return (
-    <div className="flex flex-col h-full bg-gradient-to-br from-red-900/20 via-orange-900/20 to-red-800/20 backdrop-blur-xl border border-white/10 rounded-3xl p-6">
-      {/* Header */}
-      <div className="text-center mb-6">
+    <div className="h-full flex flex-col p-5 bg-gradient-to-br from-gray-900/95 via-gray-800/95 to-gray-900/95 backdrop-blur-xl">
+      <div className="text-center mb-8">
         <h1 className="text-3xl font-bold text-white mb-2">JunkStop</h1>
-        <p className="text-white/70 text-sm">Your junk food accountability coach</p>
+        <p className="text-gray-300 text-sm">Your junk food accountability coach</p>
       </div>
-
-      {/* AI Insight */}
-      <div className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-2xl p-4 mb-6 border-l-4 border-l-blue-400">
-        <div className="flex items-center gap-2 mb-2">
-          <Brain className="w-4 h-4 text-blue-400" />
-          <span className="text-blue-400 font-semibold text-sm">AI Insight</span>
-        </div>
-        <p className="text-white/90 text-sm">{aiInsight}</p>
-      </div>
-
-      {/* Streak Counter */}
-      <div className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-2xl p-8 text-center mb-6">
-        <div className="text-5xl font-bold text-green-400 mb-2">{streakData.currentStreak}</div>
-        <div className="text-white/80 text-lg">Days Clean</div>
-        <div className="text-white/60 text-sm mt-2">Best: {streakData.bestStreak} days</div>
-      </div>
-
-      {/* Quick Stats */}
-      <div className="grid grid-cols-2 gap-4 mb-6">
-        <div className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl p-4 text-center">
-          <div className="flex items-center justify-center mb-2">
-            <DollarSign className="w-5 h-5 text-green-400" />
-          </div>
-          <div className="text-2xl font-bold text-white">${streakData.moneySaved}</div>
-          <div className="text-white/70 text-xs">Money Saved</div>
-        </div>
-        <div className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl p-4 text-center">
-          <div className="flex items-center justify-center mb-2">
-            <TrendingUp className="w-5 h-5 text-orange-400" />
-          </div>
-          <div className="text-2xl font-bold text-white">{streakData.avgGuiltScore}</div>
-          <div className="text-white/70 text-xs">Avg Guilt Score</div>
+      
+      <div className="bg-white/10 backdrop-blur-lg border border-white/20 rounded-2xl p-4 mb-6">
+        <div className="text-sm font-semibold text-green-300 mb-2">🤖 AI Insight</div>
+        <div className="text-xs text-gray-200">
+          You tend to eat junk food on Fridays around 3pm. Let's prepare for tomorrow!
         </div>
       </div>
-
-      {/* Additional Stats */}
-      <div className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl p-4 mb-6 text-center">
-        <div className="text-xl font-bold text-red-400">{streakData.totalCalories}</div>
-        <div className="text-white/70 text-xs">Calories Avoided This Week</div>
+      
+      <div className="bg-white/10 backdrop-blur-lg border border-white/20 rounded-2xl p-8 text-center mb-8">
+        <div className="text-5xl font-bold text-white mb-2">{currentStreak}</div>
+        <div className="text-white/80">Days Clean</div>
       </div>
-
-      {/* CTA Button */}
-      <button 
-        onClick={() => onNavigate(1)}
-        className="bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white font-bold py-4 px-6 rounded-2xl transition-all duration-300 transform hover:scale-105 flex items-center justify-center gap-2"
+      
+      <div className="grid grid-cols-2 gap-4 mb-8">
+        <div className="bg-white/10 backdrop-blur-lg border border-white/20 rounded-xl p-5 text-center">
+          <div className="text-2xl font-bold text-green-400 mb-1">${totalSaved}</div>
+          <div className="text-xs text-gray-300">Money Saved</div>
+        </div>
+        <div className="bg-white/10 backdrop-blur-lg border border-white/20 rounded-xl p-5 text-center">
+          <div className="text-2xl font-bold text-blue-400 mb-1">{avgGuiltScore}</div>
+          <div className="text-xs text-gray-300">Avg Guilt Score</div>
+        </div>
+      </div>
+      
+      <Button
+        onClick={onLogJunkFood}
+        className="bg-white hover:bg-gray-100 text-red-600 font-bold py-4 rounded-3xl transition-all duration-200 hover:scale-105"
       >
-        <Camera className="w-5 h-5" />
+        <Camera className="w-5 h-5 mr-2" />
         Log Junk Food
-      </button>
+      </Button>
     </div>
   );
-}
+};
+
+export default DashboardScreen;
