@@ -1,9 +1,10 @@
 import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { NavigationContainer } from '@react-navigation/native';
 import { useAuth } from '../contexts/AuthContext';
 import AuthScreen from '../screens/AuthScreen';
 import MainTabNavigator from './MainTabNavigator';
+import LogJunkFoodScreen from '../screens/LogJunkFoodScreen';
+import ChatScreen from '../screens/ChatScreen';
 import { View, ActivityIndicator } from 'react-native';
 
 const Stack = createNativeStackNavigator();
@@ -13,21 +14,23 @@ export default function AppNavigator() {
 
   if (isLoading) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0f0f23' }}>
-        <ActivityIndicator size="large" color="#ef4444" />
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#1a1a2e' }}>
+        <ActivityIndicator size="large" color="#e74c3c" />
       </View>
     );
   }
 
   return (
-    <NavigationContainer>
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
-        {isAuthenticated ? (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      {isAuthenticated ? (
+        <>
           <Stack.Screen name="Main" component={MainTabNavigator} />
-        ) : (
-          <Stack.Screen name="Auth" component={AuthScreen} />
-        )}
-      </Stack.Navigator>
-    </NavigationContainer>
+          <Stack.Screen name="LogJunkFood" component={LogJunkFoodScreen} />
+          <Stack.Screen name="Chat" component={ChatScreen} />
+        </>
+      ) : (
+        <Stack.Screen name="Auth" component={AuthScreen} />
+      )}
+    </Stack.Navigator>
   );
 }

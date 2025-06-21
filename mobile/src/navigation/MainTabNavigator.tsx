@@ -1,43 +1,11 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { View, Text } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-
-// Placeholder screens - will be implemented with full functionality
-const DashboardScreen = () => (
-  <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0f0f23' }}>
-    <Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold' }}>Dashboard</Text>
-    <Text style={{ color: '#a1a1aa', marginTop: 8 }}>Streak tracking and stats</Text>
-  </View>
-);
-
-const LogScreen = () => (
-  <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0f0f23' }}>
-    <Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold' }}>Log Junk Food</Text>
-    <Text style={{ color: '#a1a1aa', marginTop: 8 }}>Take photos and rate guilt</Text>
-  </View>
-);
-
-const ProgressScreen = () => (
-  <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0f0f23' }}>
-    <Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold' }}>Progress</Text>
-    <Text style={{ color: '#a1a1aa', marginTop: 8 }}>Analytics and insights</Text>
-  </View>
-);
-
-const ChatScreen = () => (
-  <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0f0f23' }}>
-    <Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold' }}>AI Coach</Text>
-    <Text style={{ color: '#a1a1aa', marginTop: 8 }}>Get personalized support</Text>
-  </View>
-);
-
-const CommunityScreen = () => (
-  <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0f0f23' }}>
-    <Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold' }}>Community</Text>
-    <Text style={{ color: '#a1a1aa', marginTop: 8 }}>Anonymous confessions</Text>
-  </View>
-);
+import DashboardScreen from '../screens/DashboardScreen';
+import LogJunkFoodScreen from '../screens/LogJunkFoodScreen';
+import ProgressScreen from '../screens/ProgressScreen';
+import CommunityScreen from '../screens/CommunityScreen';
+import ChatScreen from '../screens/ChatScreen';
 
 const Tab = createBottomTabNavigator();
 
@@ -80,7 +48,7 @@ export default function MainTabNavigator() {
       })}
     >
       <Tab.Screen name="Dashboard" component={DashboardScreen} />
-      <Tab.Screen name="Log" component={LogScreen} />
+      <Tab.Screen name="Log" component={LogJunkFoodScreen} />
       <Tab.Screen name="Progress" component={ProgressScreen} />
       <Tab.Screen name="Chat" component={ChatScreen} />
       <Tab.Screen name="Community" component={CommunityScreen} />

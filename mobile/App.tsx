@@ -1,4 +1,5 @@
 import React from 'react';
+import { NavigationContainer } from '@react-navigation/native';
 import { StatusBar } from 'expo-status-bar';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -21,8 +22,10 @@ export default function App() {
       <SafeAreaProvider>
         <QueryClientProvider client={queryClient}>
           <AuthProvider>
-            <StatusBar style="light" backgroundColor="#1a1a2e" />
-            <AppNavigator />
+            <NavigationContainer>
+              <StatusBar style="light" backgroundColor="#1a1a2e" />
+              <AppNavigator />
+            </NavigationContainer>
           </AuthProvider>
         </QueryClientProvider>
       </SafeAreaProvider>
