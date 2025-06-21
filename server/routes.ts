@@ -218,10 +218,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         food_type: log.food_type,
         guilt_rating: log.guilt_rating,
         regret_rating: log.regret_rating,
-        estimated_cost: parseFloat(log.estimated_cost),
+        estimated_cost: parseFloat(log.estimated_cost || "0"),
         estimated_calories: log.estimated_calories,
         location: log.location,
-        created_at: log.created_at.toISOString(),
+        created_at: log.created_at?.toISOString() || new Date().toISOString(),
         ai_motivation
       });
     } catch (error) {
@@ -244,10 +244,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         food_type: log.food_type,
         guilt_rating: log.guilt_rating,
         regret_rating: log.regret_rating,
-        estimated_cost: parseFloat(log.estimated_cost),
+        estimated_cost: parseFloat(log.estimated_cost || "0"),
         estimated_calories: log.estimated_calories,
         location: log.location,
-        created_at: log.created_at.toISOString(),
+        created_at: log.created_at?.toISOString() || new Date().toISOString(),
         ai_motivation: `Great job logging this! Awareness is the first step to change.`
       }));
       
@@ -377,7 +377,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         content: post.content,
         photo_url: post.photo_url,
         likes_count: post.likes_count,
-        created_at: post.created_at.toISOString()
+        created_at: post.created_at?.toISOString() || new Date().toISOString()
       }));
       
       res.json(formattedPosts);
@@ -404,7 +404,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         content: post.content,
         photo_url: post.photo_url,
         likes_count: post.likes_count,
-        created_at: post.created_at.toISOString()
+        created_at: post.created_at?.toISOString() || new Date().toISOString()
       });
     } catch (error) {
       console.error("Create community post error:", error);
