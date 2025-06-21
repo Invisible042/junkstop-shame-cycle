@@ -7,12 +7,12 @@ JunkStop is a mobile-first web application designed to help users track and redu
 ## System Architecture
 
 ### Frontend Architecture
-- **Framework**: React 18 with TypeScript
-- **Build Tool**: Vite for fast development and optimized builds
-- **UI Framework**: Tailwind CSS with shadcn/ui component library
-- **State Management**: React Query for server state, React hooks for local state
-- **Routing**: React Router for client-side navigation
-- **Mobile-First**: Responsive design optimized for mobile devices
+- **Framework**: React Native with Expo and TypeScript
+- **Development**: Expo CLI for cross-platform mobile development
+- **UI Framework**: React Native with custom styled components
+- **State Management**: React Context for auth, secure storage for persistence
+- **Navigation**: React Navigation for native mobile navigation
+- **Mobile-Native**: True mobile app with native iOS/Android support
 
 ### Backend Architecture
 - **Primary Backend**: FastAPI with Python 3.11
@@ -125,6 +125,13 @@ Changelog:
   * Real-time streak tracking and guilt/regret scoring
   * Community features and weekly analytics
   * Mobile-first responsive design with dark theme
+- June 21, 2025. Converted to React Native mobile app with monorepo structure:
+  * Migrated from web to native mobile app using React Native and Expo
+  * Created beautiful signup screen with glassmorphism effects and gradient theming
+  * Implemented secure authentication with Expo SecureStore
+  * Added bottom tab navigation with 5 main screens
+  * Set up unified development workflow with single command startup
+  * Created monorepo structure for backend and mobile development
 ```
 
 ## User Preferences
