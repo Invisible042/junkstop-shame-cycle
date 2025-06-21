@@ -83,6 +83,30 @@ const Login = () => {
             </TabsList>
             
             <TabsContent value="login">
+              <div className="mb-4 p-3 bg-blue-900/50 border border-blue-700 rounded">
+                <p className="text-xs text-blue-200 mb-2">Development Mode - Quick Login:</p>
+                <div className="flex gap-2">
+                  <Button 
+                    type="button" 
+                    size="sm" 
+                    variant="outline"
+                    className="text-xs bg-blue-800 hover:bg-blue-700 border-blue-600"
+                    onClick={() => setLoginData({ email: 'demo@junkstop.com', password: 'demo123' })}
+                  >
+                    Demo User
+                  </Button>
+                  <Button 
+                    type="button" 
+                    size="sm" 
+                    variant="outline"
+                    className="text-xs bg-green-800 hover:bg-green-700 border-green-600"
+                    onClick={() => setLoginData({ email: 'admin@junkstop.com', password: 'admin123' })}
+                  >
+                    Admin
+                  </Button>
+                </div>
+              </div>
+              
               <form onSubmit={handleLogin} className="space-y-4">
                 <div>
                   <Label htmlFor="email">Email</Label>

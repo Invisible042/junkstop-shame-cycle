@@ -10,11 +10,11 @@ from PIL import Image
 import io
 from dotenv import load_dotenv
 
-from .models import *
-from .database import get_supabase_client, create_tables
-from .auth import get_current_user, create_access_token, verify_password, get_password_hash
-from .storage import upload_image, delete_image
-from .ai_coach import generate_motivation, analyze_patterns, estimate_calories
+from apps.backend.models import *
+from apps.backend.database import get_supabase_client, create_tables
+from apps.backend.auth import get_current_user, create_access_token, verify_password, get_password_hash
+from apps.backend.storage import upload_image, delete_image
+from apps.backend.ai_coach import generate_motivation, analyze_patterns, estimate_calories
 
 load_dotenv()
 
@@ -339,7 +339,9 @@ async def get_daily_insight(current_user: dict = Depends(get_current_user)):
 @app.post("/api/ai/chat")
 async def chat_with_ai(message: ChatMessage, current_user: dict = Depends(get_current_user)):
     try:
-        response = await generate_motivation(current_user["id"], message.guilt_level, message.regret_level, message.message)
+        guilt_rating = message.guilt_level if message.guilt_level is not None else 5
+        regret_rating = message.regret_level if message.regret_level is not None else 5
+        response = await generate_motivation(current_user["id"], guilt_rating, regret_rating, message.message)
         return {"response": response, "timestamp": datetime.utcnow().isoformat()}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

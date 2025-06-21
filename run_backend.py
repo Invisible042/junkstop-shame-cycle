@@ -17,7 +17,7 @@ if __name__ == "__main__":
     os.environ.setdefault("JWT_SECRET_KEY", "junkstop-secret-key-change-in-production")
     
     # Import and run the FastAPI app
-    from backend.main import app
+    from apps.backend.main import app
     
     print("Starting JunkStop FastAPI backend server...")
     print("Backend will run on http://0.0.0.0:8000")
