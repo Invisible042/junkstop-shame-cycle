@@ -5,7 +5,7 @@ from passlib.context import CryptContext
 from fastapi import HTTPException, status, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import os
-from .database import get_supabase_client
+from .postgres_client import db_client
 
 # Security configuration
 SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-in-production")
@@ -52,10 +52,12 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         raise credentials_exception
     
     # Get user from database
-    supabase = get_supabase_client()
-    result = supabase.table("users").select("*").eq("email", email).execute()
+    users = db_client.execute_query(
+        "SELECT * FROM users WHERE email = %s",
+        (email,)
+    )
     
-    if not result.data:
+    if not users:
         raise credentials_exception
     
-    return result.data[0]
+    return users[0]

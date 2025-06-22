@@ -15,8 +15,12 @@ def get_supabase_client() -> Client:
         supabase_url = os.getenv("SUPABASE_URL")
         supabase_key = os.getenv("SUPABASE_ANON_KEY")
         
-        if supabase_url and supabase_key:
-            _supabase_client = create_client(supabase_url, supabase_key)
+        if supabase_url and supabase_key and supabase_url.startswith("http"):
+            try:
+                _supabase_client = create_client(supabase_url, supabase_key)
+            except Exception as e:
+                print(f"Failed to connect to Supabase: {e}")
+                _supabase_client = LocalStorageClient()
         else:
             # Fallback to in-memory storage for local development
             _supabase_client = LocalStorageClient()

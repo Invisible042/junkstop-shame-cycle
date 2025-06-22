@@ -1,4 +1,4 @@
 #!/bin/bash
-cd apps/backend
-export PYTHONPATH=$PWD:$PWD/../..
-python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+cd /home/runner/workspace
+export PYTHONPATH=/home/runner/workspace
+python -m uvicorn apps.backend.main:app --host 0.0.0.0 --port 8000

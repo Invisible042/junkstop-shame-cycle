@@ -10,11 +10,11 @@ from PIL import Image
 import io
 from dotenv import load_dotenv
 
-from apps.backend.models import *
-from apps.backend.database import get_supabase_client, create_tables
-from apps.backend.auth import get_current_user, create_access_token, verify_password, get_password_hash
-from apps.backend.storage import upload_image, delete_image
-from apps.backend.ai_coach import generate_motivation, analyze_patterns, estimate_calories
+from models import *
+from postgres_client import db_client
+from auth import get_current_user, create_access_token, verify_password, get_password_hash
+from storage import upload_image, delete_image
+from ai_coach import generate_motivation, analyze_patterns, estimate_calories
 
 load_dotenv()
 
@@ -30,14 +30,15 @@ app.add_middleware(
 )
 
 # Serve uploaded files
-if not os.path.exists("uploads"):
-    os.makedirs("uploads")
-app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+uploads_dir = "/tmp/uploads"
+if not os.path.exists(uploads_dir):
+    os.makedirs(uploads_dir)
+app.mount("/uploads", StaticFiles(directory=uploads_dir), name="uploads")
 
 # Create tables on startup
 @app.on_event("startup")
 async def startup_event():
-    await create_tables()
+    print("FastAPI server starting...")
 
 # Health check
 @app.get("/health")
@@ -47,28 +48,28 @@ async def health_check():
 # Authentication endpoints
 @app.post("/api/auth/register", response_model=UserResponse)
 async def register(user_data: UserCreate):
-    supabase = get_supabase_client()
-    
     try:
         # Check if user already exists
-        existing_user = supabase.table("users").select("*").eq("email", user_data.email).execute()
-        if existing_user.data:
+        existing_users = db_client.execute_query(
+            "SELECT * FROM users WHERE email = %s",
+            (user_data.email,)
+        )
+        if existing_users:
             raise HTTPException(status_code=400, detail="Email already registered")
         
         # Create user
         hashed_password = get_password_hash(user_data.password)
-        user_dict = {
-            "email": user_data.email,
-            "username": user_data.username,
-            "password_hash": hashed_password,
-            "streak_count": 0,
-            "best_streak": 0,
-            "total_guilt_score": 0,
-            "created_at": datetime.utcnow().isoformat()
-        }
+        user = db_client.execute_insert(
+            """
+            INSERT INTO users (email, username, password_hash, streak_count, best_streak, total_guilt_score, created_at) 
+            VALUES (%s, %s, %s, %s, %s, %s, %s) 
+            RETURNING *
+            """,
+            (user_data.email, user_data.username, hashed_password, 0, 0, 0.0, datetime.utcnow())
+        )
         
-        result = supabase.table("users").insert(user_dict).execute()
-        user = result.data[0]
+        if not user:
+            raise HTTPException(status_code=500, detail="Failed to create user")
         
         # Generate access token
         access_token = create_access_token(data={"sub": user["email"]})
@@ -82,20 +83,23 @@ async def register(user_data: UserCreate):
             "access_token": access_token,
             "token_type": "bearer"
         }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/auth/login", response_model=UserResponse)
 async def login(login_data: UserLogin):
-    supabase = get_supabase_client()
-    
     try:
         # Get user by email
-        result = supabase.table("users").select("*").eq("email", login_data.email).execute()
-        if not result.data:
+        users = db_client.execute_query(
+            "SELECT * FROM users WHERE email = %s",
+            (login_data.email,)
+        )
+        if not users:
             raise HTTPException(status_code=401, detail="Invalid credentials")
         
-        user = result.data[0]
+        user = users[0]
         
         # Verify password
         if not verify_password(login_data.password, user["password_hash"]):
@@ -121,16 +125,21 @@ async def login(login_data: UserLogin):
 # User endpoints
 @app.get("/api/user/profile", response_model=UserProfile)
 async def get_user_profile(current_user: dict = Depends(get_current_user)):
-    supabase = get_supabase_client()
-    
     try:
         # Get user stats
-        user_result = supabase.table("users").select("*").eq("id", current_user["id"]).execute()
-        user = user_result.data[0]
+        users = db_client.execute_query(
+            "SELECT * FROM users WHERE id = %s",
+            (current_user["id"],)
+        )
+        if not users:
+            raise HTTPException(status_code=404, detail="User not found")
+        user = users[0]
         
         # Get recent logs for calculations
-        logs_result = supabase.table("junk_food_logs").select("*").eq("user_id", current_user["id"]).order("created_at", desc=True).limit(50).execute()
-        logs = logs_result.data
+        logs = db_client.execute_query(
+            "SELECT * FROM junk_food_logs WHERE user_id = %s ORDER BY created_at DESC LIMIT 50",
+            (current_user["id"],)
+        )
         
         # Calculate stats
         total_saved = sum([log.get("estimated_cost", 0) for log in logs])
@@ -161,8 +170,6 @@ async def create_log(
     location: Optional[str] = Form(None),
     current_user: dict = Depends(get_current_user)
 ):
-    supabase = get_supabase_client()
-    
     try:
         # Upload photo
         photo_url = await upload_image(photo, current_user["id"])
@@ -171,23 +178,23 @@ async def create_log(
         estimated_calories = await estimate_calories(food_type)
         
         # Create log entry
-        log_dict = {
-            "user_id": current_user["id"],
-            "photo_url": photo_url,
-            "food_type": food_type,
-            "guilt_rating": guilt_rating,
-            "regret_rating": regret_rating,
-            "estimated_cost": estimated_cost or 0,
-            "estimated_calories": estimated_calories,
-            "location": location,
-            "created_at": datetime.utcnow().isoformat()
-        }
+        log = db_client.execute_insert(
+            """
+            INSERT INTO junk_food_logs (user_id, photo_url, food_type, guilt_rating, regret_rating, estimated_cost, estimated_calories, location, created_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING *
+            """,
+            (current_user["id"], photo_url, food_type, guilt_rating, regret_rating, estimated_cost or 0, estimated_calories, location, datetime.utcnow())
+        )
         
-        result = supabase.table("junk_food_logs").insert(log_dict).execute()
-        log = result.data[0]
+        if not log:
+            raise HTTPException(status_code=500, detail="Failed to create log")
         
         # Reset user streak
-        supabase.table("users").update({"streak_count": 0}).eq("id", current_user["id"]).execute()
+        db_client.execute_update(
+            "UPDATE users SET streak_count = 0 WHERE id = %s",
+            (current_user["id"],)
+        )
         
         # Generate AI motivation
         motivation = await generate_motivation(current_user["id"], guilt_rating, regret_rating)
@@ -213,10 +220,11 @@ async def get_user_logs(
     offset: int = 0,
     current_user: dict = Depends(get_current_user)
 ):
-    supabase = get_supabase_client()
-    
     try:
-        result = supabase.table("junk_food_logs").select("*").eq("user_id", current_user["id"]).order("created_at", desc=True).range(offset, offset + limit - 1).execute()
+        logs = db_client.execute_query(
+            "SELECT * FROM junk_food_logs WHERE user_id = %s ORDER BY created_at DESC LIMIT %s OFFSET %s",
+            (current_user["id"], limit, offset)
+        )
         
         return [
             {
@@ -230,7 +238,7 @@ async def get_user_logs(
                 "location": log["location"],
                 "created_at": log["created_at"]
             }
-            for log in result.data
+            for log in logs
         ]
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -238,21 +246,24 @@ async def get_user_logs(
 # Streak management
 @app.post("/api/streak/increment")
 async def increment_streak(current_user: dict = Depends(get_current_user)):
-    supabase = get_supabase_client()
-    
     try:
         # Get current user data
-        user_result = supabase.table("users").select("*").eq("id", current_user["id"]).execute()
-        user = user_result.data[0]
+        users = db_client.execute_query(
+            "SELECT * FROM users WHERE id = %s",
+            (current_user["id"],)
+        )
+        if not users:
+            raise HTTPException(status_code=404, detail="User not found")
         
+        user = users[0]
         new_streak = user["streak_count"] + 1
         best_streak = max(user["best_streak"], new_streak)
         
         # Update user
-        supabase.table("users").update({
-            "streak_count": new_streak,
-            "best_streak": best_streak
-        }).eq("id", current_user["id"]).execute()
+        db_client.execute_update(
+            "UPDATE users SET streak_count = %s, best_streak = %s WHERE id = %s",
+            (new_streak, best_streak, current_user["id"])
+        )
         
         return {
             "streak_count": new_streak,
@@ -265,14 +276,13 @@ async def increment_streak(current_user: dict = Depends(get_current_user)):
 # Progress analytics
 @app.get("/api/analytics/weekly")
 async def get_weekly_analytics(current_user: dict = Depends(get_current_user)):
-    supabase = get_supabase_client()
-    
     try:
         # Get logs from last 7 days
-        week_ago = (datetime.utcnow() - timedelta(days=7)).isoformat()
-        result = supabase.table("junk_food_logs").select("*").eq("user_id", current_user["id"]).gte("created_at", week_ago).execute()
-        
-        logs = result.data
+        week_ago = datetime.utcnow() - timedelta(days=7)
+        logs = db_client.execute_query(
+            "SELECT * FROM junk_food_logs WHERE user_id = %s AND created_at >= %s",
+            (current_user["id"], week_ago)
+        )
         
         if not logs:
             return {
@@ -349,10 +359,11 @@ async def chat_with_ai(message: ChatMessage, current_user: dict = Depends(get_cu
 # Community endpoints
 @app.get("/api/community/posts")
 async def get_community_posts(limit: int = 20, offset: int = 0):
-    supabase = get_supabase_client()
-    
     try:
-        result = supabase.table("community_posts").select("*").eq("is_anonymous", True).order("created_at", desc=True).range(offset, offset + limit - 1).execute()
+        posts = db_client.execute_query(
+            "SELECT * FROM community_posts WHERE is_anonymous = %s ORDER BY created_at DESC LIMIT %s OFFSET %s",
+            (True, limit, offset)
+        )
         
         return [
             {
@@ -362,7 +373,7 @@ async def get_community_posts(limit: int = 20, offset: int = 0):
                 "likes_count": post.get("likes_count", 0),
                 "created_at": post["created_at"]
             }
-            for post in result.data
+            for post in posts
         ]
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -372,20 +383,18 @@ async def create_community_post(
     post_data: CommunityPostCreate,
     current_user: dict = Depends(get_current_user)
 ):
-    supabase = get_supabase_client()
-    
     try:
-        post_dict = {
-            "user_id": current_user["id"],
-            "content": post_data.content,
-            "photo_url": post_data.photo_url,
-            "is_anonymous": post_data.is_anonymous,
-            "likes_count": 0,
-            "created_at": datetime.utcnow().isoformat()
-        }
+        post = db_client.execute_insert(
+            """
+            INSERT INTO community_posts (user_id, content, photo_url, is_anonymous, likes_count, created_at)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            RETURNING *
+            """,
+            (current_user["id"], post_data.content, post_data.photo_url, post_data.is_anonymous, 0, datetime.utcnow())
+        )
         
-        result = supabase.table("community_posts").insert(post_dict).execute()
-        post = result.data[0]
+        if not post:
+            raise HTTPException(status_code=500, detail="Failed to create post")
         
         return {
             "id": post["id"],
