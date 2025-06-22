@@ -29,26 +29,13 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
-args = "Backend Server"
-
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "Mobile Dev Server"
+args = "JunkStop Backend"
 
 [[workflows.workflow]]
-name = "Backend Server"
+name = "JunkStop Backend"
 author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "python start_backend.py"
 waitForPort = 5000
-
-[[workflows.workflow]]
-name = "Mobile Dev Server"
-author = "agent"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "cd mobile && npm install --legacy-peer-deps && npm start"
-waitForPort = 19006
