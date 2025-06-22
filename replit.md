@@ -21,14 +21,12 @@ JunkStop is a mobile-first web application designed to help users track and redu
 - **Authentication**: JWT tokens with Bearer authentication
 - **File Upload**: Multipart form data with image processing
 - **AI Integration**: OpenRouter API for coaching and calorie estimation
-- **Fallback Backend**: Node.js with Express.js (for development)
+- **Demo User**: demo@junkstop.com / password
 
 ### Data Storage
-- **Database**: Supabase PostgreSQL (production) with local fallback
-- **Backend ORM**: Supabase Python client with direct SQL operations
-- **Frontend ORM**: Drizzle ORM with type-safe queries (for Node.js fallback)
-- **Schema Management**: Supabase dashboard and Drizzle migrations
-- **Development Storage**: In-memory storage implementation for rapid prototyping
+- **Database**: PostgreSQL with direct connections
+- **Backend ORM**: Direct SQL operations via psycopg2
+- **Schema Management**: Manual SQL table creation
 - **Authentication**: JWT tokens with secure password hashing
 
 ### UI Component System
