@@ -1,7 +1,7 @@
 import os
 import httpx
 from typing import Optional
-from .database import get_supabase_client
+from postgres_client import db_client
 
 # OpenRouter API configuration
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
@@ -11,12 +11,14 @@ async def generate_motivation(user_id: int, guilt_rating: int, regret_rating: in
     """Generate AI-powered motivation message based on user's guilt and regret ratings"""
     
     # Get user's recent patterns
-    supabase = get_supabase_client()
-    recent_logs = supabase.table("junk_food_logs").select("*").eq("user_id", user_id).order("created_at", desc=True).limit(10).execute()
+    recent_logs = db_client.execute_query(
+        "SELECT * FROM junk_food_logs WHERE user_id = %s ORDER BY created_at DESC LIMIT 10",
+        (user_id,)
+    )
     
     # Calculate pattern data
-    avg_guilt = sum([log.get("guilt_rating", 0) for log in recent_logs.data]) / len(recent_logs.data) if recent_logs.data else 0
-    total_logs_week = len([log for log in recent_logs.data if log.get("created_at", "")[:10] >= "2024-01-01"])  # Simplified date check
+    avg_guilt = sum([log.get("guilt_rating", 0) for log in recent_logs]) / len(recent_logs) if recent_logs else 0
+    total_logs_week = len([log for log in recent_logs if log.get("created_at", "")[:10] >= "2024-01-01"])  # Simplified date check
     
     # Create context for AI
     context = f"""
@@ -149,11 +151,11 @@ def get_fallback_calories(food_description: str) -> int:
 async def analyze_patterns(user_id: int) -> str:
     """Analyze user patterns and provide insights"""
     
-    supabase = get_supabase_client()
-    
     # Get recent logs
-    logs_result = supabase.table("junk_food_logs").select("*").eq("user_id", user_id).order("created_at", desc=True).limit(20).execute()
-    logs = logs_result.data
+    logs = db_client.execute_query(
+        "SELECT * FROM junk_food_logs WHERE user_id = %s ORDER BY created_at DESC LIMIT 20",
+        (user_id,)
+    )
     
     if not logs:
         return "Start logging your junk food to get personalized insights about your eating patterns."
