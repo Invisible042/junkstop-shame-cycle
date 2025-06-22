@@ -40,6 +40,24 @@ app.mount("/uploads", StaticFiles(directory=uploads_dir), name="uploads")
 async def startup_event():
     print("FastAPI server starting...")
 
+# Root endpoint
+@app.get("/")
+async def root():
+    return {
+        "message": "JunkStop API is running",
+        "version": "1.0.0",
+        "status": "healthy",
+        "endpoints": {
+            "health": "/health",
+            "auth": "/api/auth/*",
+            "user": "/api/user/*",
+            "logs": "/api/logs",
+            "analytics": "/api/analytics/*",
+            "ai": "/api/ai/*",
+            "community": "/api/community/*"
+        }
+    }
+
 # Health check
 @app.get("/health")
 async def health_check():
