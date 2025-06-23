@@ -43,6 +43,7 @@
         }
       ]
     ],
-    "scheme": "junkstop"
+    "scheme": "junkstop",
+    "sdkVersion": "53.0.0"
   }
 }

@@ -1,6 +1,34 @@
-node_modules
-dist
-.DS_Store
-server/public
-vite.config.ts.*
+# Node/Expo
+node_modules/
+dist/
 *.tar.gz
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+expo-debug.log*
+
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build/Output
+server/public/
+build/
+*.log
+
+# IDEs
+.vscode/
+.idea/
+*.swp
