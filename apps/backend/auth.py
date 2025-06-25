@@ -1,10 +1,12 @@
+import os
+from dotenv import load_dotenv
+load_dotenv()
 from datetime import datetime, timedelta
 from typing import Optional
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from fastapi import HTTPException, status, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-import os
 from postgres_client import db_client
 
 # Security configuration

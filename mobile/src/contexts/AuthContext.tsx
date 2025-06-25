@@ -63,7 +63,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       const response = await apiRequest('/api/auth/login', {
         method: 'POST',
-        body: JSON.stringify({ email, password }),
+        data: { email, password },
       });
 
       const { access_token, ...userData } = response;
@@ -87,7 +87,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       const response = await apiRequest('/api/auth/register', {
         method: 'POST',
-        body: JSON.stringify({ email, username, password }),
+        data: { email, username, password },
       });
 
       const { access_token, ...userData } = response;

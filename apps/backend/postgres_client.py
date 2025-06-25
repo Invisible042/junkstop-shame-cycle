@@ -1,10 +1,12 @@
 import os
+from dotenv import load_dotenv
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from typing import List, Dict, Any, Optional
 import bcrypt
 from datetime import datetime
 
+load_dotenv()
 class PostgreSQLClient:
     """PostgreSQL client for JunkStop app using the existing Replit database"""
     

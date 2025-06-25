@@ -1,4 +1,6 @@
 import os
+from dotenv import load_dotenv
+load_dotenv()
 import httpx
 from typing import Optional
 from postgres_client import db_client
