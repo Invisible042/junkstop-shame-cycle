@@ -42,7 +42,7 @@ export default function DashboardScreen({ navigation }: { navigation: any }) {
 
   const fetchDailyInsight = async () => {
     try {
-      const insightData = await apiRequest('/api/insights/daily');
+      const insightData = await apiRequest('/api/ai/daily-insight');
       setDailyInsight(insightData.insight);
     } catch (error) {
       console.error('Failed to fetch insight:', error);

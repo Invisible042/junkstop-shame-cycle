@@ -175,7 +175,7 @@ async def get_user_profile(current_user: dict = Depends(get_current_user)):
             "total_saved": total_saved,
             "avg_guilt_score": round(avg_guilt_score, 1),
             "total_logs": len(logs),
-            "created_at": user["created_at"]
+            "created_at": user["created_at"].isoformat() if hasattr(user["created_at"], "isoformat") else str(user["created_at"])
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
