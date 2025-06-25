@@ -102,8 +102,8 @@ export default function LogJunkFoodScreen({ navigation }: LogJunkFoodScreenProps
       formData.append('food_type', foodType);
       formData.append('guilt_rating', guiltRating.toString());
       formData.append('regret_rating', regretRating.toString());
-      formData.append('estimated_cost', estimatedCost);
-      formData.append('location', location);
+      if (estimatedCost) formData.append('estimated_cost', estimatedCost.toString());
+      if (location) formData.append('location', location);
 
       const result = await uploadFile('/api/logs', formData);
 

@@ -56,7 +56,6 @@ export const uploadFile = async (url: string, formData: FormData) => {
     const token = await SecureStore.getItemAsync('auth_token');
     const response = await api.post(url, formData, {
       headers: {
-        'Content-Type': 'multipart/form-data',
         ...(token && { Authorization: `Bearer ${token}` }),
       },
     });
