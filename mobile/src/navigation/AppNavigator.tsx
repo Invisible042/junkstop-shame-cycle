@@ -5,6 +5,7 @@ import AuthScreen from '../screens/AuthScreen';
 import MainTabNavigator from './MainTabNavigator';
 import LogJunkFoodScreen from '../screens/LogJunkFoodScreen';
 import ChatScreen from '../screens/ChatScreen';
+import SettingsScreen from '../screens/SettingsScreen';
 import { View, ActivityIndicator } from 'react-native';
 
 const Stack = createNativeStackNavigator();
@@ -27,6 +28,7 @@ export default function AppNavigator() {
           <Stack.Screen name="Main" component={MainTabNavigator} />
           <Stack.Screen name="LogJunkFood" component={LogJunkFoodScreen} />
           <Stack.Screen name="Chat" component={ChatScreen} />
+          <Stack.Screen name="Settings" component={SettingsScreen} />
         </>
       ) : (
         <Stack.Screen name="Auth" component={AuthScreen} />

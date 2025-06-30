@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useLayoutEffect } from 'react';
 import {
   View,
   Text,
@@ -94,9 +94,14 @@ export default function DashboardScreen({ navigation }: { navigation: any }) {
         colors={['#1a1a2e', '#16213e', '#0f3460']}
         style={styles.header}
       >
-        <View style={styles.welcomeSection}>
-          <Text style={styles.welcomeText}>Welcome back,</Text>
-          <Text style={styles.usernameText}>{user?.username || 'User'}!</Text>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <View style={styles.welcomeSection}>
+            <Text style={styles.welcomeText}>Welcome back,</Text>
+            <Text style={styles.usernameText}>{user?.username || 'User'}!</Text>
+          </View>
+          <TouchableOpacity onPress={() => navigation.navigate('Settings')} style={{ marginLeft: 12 }}>
+            <Ionicons name="settings-outline" size={26} color="#8e44ad" />
+          </TouchableOpacity>
         </View>
 
         <View style={styles.streakCard}>

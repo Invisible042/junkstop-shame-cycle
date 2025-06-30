@@ -14,6 +14,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { apiRequest } from '../utils/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface CommunityPost {
   id: number;
@@ -41,6 +42,7 @@ export default function CommunityScreen() {
   const [replies, setReplies] = useState<any[]>([]);
   const [repliesLoading, setRepliesLoading] = useState(false);
   const [replySubmitting, setReplySubmitting] = useState(false);
+  const STORAGE_KEY = '@junkstop/community_posts';
 
   const fetchPosts = async () => {
     try {
@@ -73,7 +75,7 @@ export default function CommunityScreen() {
         },
       });
 
-      setPosts([newPost, ...posts]);
+      setPosts((prev) => [newPost, ...prev]);
       setNewPostContent('');
       setShowNewPost(false);
       Alert.alert('Success', 'Your post has been shared with the community!');
@@ -107,7 +109,7 @@ export default function CommunityScreen() {
         post.id === postId
           ? {
               ...post,
-              likes_count: post.likes_count + (liked ? -1 : 1),
+              likes_count: Math.max(0, post.likes_count + (liked ? -1 : 1)),
               liked_by_user: !liked,
             }
           : post
@@ -129,7 +131,7 @@ export default function CommunityScreen() {
       setPosts((prevPosts) =>
         prevPosts.map((post) =>
           post.id === postId
-            ? { ...post, likes_count: response.likes_count }
+            ? { ...post, likes_count: Math.max(0, response.likes_count) }
             : post
         )
       );
@@ -182,9 +184,45 @@ export default function CommunityScreen() {
     setReplySubmitting(false);
   };
 
+  // Sanitize posts to ensure UI consistency
+  const sanitizePosts = (posts: CommunityPost[]) =>
+    posts.map(post => ({
+      ...post,
+      liked_by_user: post.likes_count > 0 ? post.liked_by_user : false,
+      likes_count: Math.max(0, post.likes_count),
+    }));
+
+  // Load posts from AsyncStorage on mount
   useEffect(() => {
-    fetchPosts();
+    const loadPosts = async () => {
+      try {
+        const cached = await AsyncStorage.getItem(STORAGE_KEY);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          setPosts(sanitizePosts(parsed));
+        } else {
+          // No cache, fetch from backend
+          await fetchAndCachePosts();
+        }
+      } catch (e) {
+        // Fallback to fetch if storage fails
+        await fetchAndCachePosts();
+      }
+    };
+    loadPosts();
   }, []);
+
+  // Fetch from backend and update AsyncStorage
+  const fetchAndCachePosts = async () => {
+    try {
+      const data = await apiRequest('/api/community/posts?limit=20');
+      const sanitized = sanitizePosts(data);
+      setPosts(sanitized);
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(sanitized));
+    } catch (error) {
+      console.error('Failed to fetch posts:', error);
+    }
+  };
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);

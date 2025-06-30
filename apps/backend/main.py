@@ -9,6 +9,8 @@ import base64
 from PIL import Image
 import io
 from dotenv import load_dotenv
+from pydantic import BaseModel
+from passlib.hash import bcrypt
 
 from models import *
 from postgres_client import db_client
@@ -583,6 +585,61 @@ async def get_replies(post_id: int, current_user: dict = Depends(get_current_use
             }
             for reply in replies
         ]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+class UserProfileUpdate(BaseModel):
+    username: str
+    email: str = None
+
+class PasswordChangeRequest(BaseModel):
+    old_password: str
+    new_password: str
+
+@app.put("/api/user/profile")
+async def update_user_profile(update: UserProfileUpdate, current_user: dict = Depends(get_current_user)):
+    try:
+        # Only allow updating username and (optionally) email
+        db_client.execute_update(
+            "UPDATE users SET username = %s{} WHERE id = %s".format(
+                ", email = %s" if update.email else ""
+            ),
+            (update.username, update.email, current_user["id"]) if update.email else (update.username, current_user["id"])
+        )
+        # Return updated profile
+        user = db_client.execute_query(
+            "SELECT * FROM users WHERE id = %s",
+            (current_user["id"],)
+        )[0]
+        return {
+            "id": user["id"],
+            "email": user["email"],
+            "username": user["username"],
+            "streak_count": user["streak_count"],
+            "best_streak": user["best_streak"],
+            "created_at": user["created_at"]
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/user/change-password")
+async def change_password(req: PasswordChangeRequest, current_user: dict = Depends(get_current_user)):
+    try:
+        # Get current user
+        user = db_client.execute_query(
+            "SELECT * FROM users WHERE id = %s",
+            (current_user["id"],)
+        )[0]
+        # Check old password
+        if not bcrypt.verify(req.old_password, user["password_hash"]):
+            raise HTTPException(status_code=400, detail="Old password is incorrect")
+        # Update password
+        new_hash = bcrypt.hash(req.new_password)
+        db_client.execute_update(
+            "UPDATE users SET password_hash = %s WHERE id = %s",
+            (new_hash, current_user["id"])
+        )
+        return {"success": True}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
