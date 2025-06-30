@@ -18,6 +18,7 @@ def ensure_upload_dir():
         os.makedirs(UPLOAD_DIR)
 
 async def upload_image(file: UploadFile, user_id: int) -> str:
+    print("working here 2")
     """Upload and process image file"""
     ensure_upload_dir()
     

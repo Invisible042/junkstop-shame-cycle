@@ -5,18 +5,17 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "backend": ". venv/bin/activate && cd apps/backend && python3 ../../start_backend.py",
+    "backend": "cmd /c \"venv\\Scripts\\activate && cd apps\\backend && python ..\\..\\start_backend.py\"",
     "frontend": "cd mobile && npm start",
-    "dev": "concurrently \"npm run backend\" \"npm run frontend\"",
+    "dev": "concurrently --raw \"npm run backend\" \"npm run frontend\"",
     "install:frontend": "cd mobile && npm install",
-    "install:backend": "source venv/bin/activate pip install -r requirements.txt || pip install .",
+    "install:backend": "cmd /c \"venv\\Scripts\\activate && pip install -r requirements.txt || pip install .\"",
     "install:all": "npm run install:frontend && npm run install:backend"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "concurrently": "^9.2.0",
     "fastapi": "^0.0.8"
   },
   "devDependencies": {

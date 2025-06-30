@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   Alert,
   RefreshControl,
   Modal,
+  ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -20,6 +21,7 @@ interface CommunityPost {
   photo_url?: string;
   likes_count: number;
   created_at: string;
+  liked_by_user: boolean;
 }
 
 export default function CommunityScreen() {
@@ -29,6 +31,16 @@ export default function CommunityScreen() {
   const [newPostContent, setNewPostContent] = useState('');
   const [isAnonymous, setIsAnonymous] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [likeClickCounts, setLikeClickCounts] = useState<{ [postId: number]: number }>({});
+  const [likeDisabled, setLikeDisabled] = useState<{ [postId: number]: boolean }>({});
+  const likeTimeouts = useRef<{ [postId: number]: NodeJS.Timeout }>({});
+  const [replyModalVisible, setReplyModalVisible] = useState(false);
+  const [replyingToPost, setReplyingToPost] = useState<CommunityPost | null>(null);
+  const [replyInput, setReplyInput] = useState('');
+  const [replyIsAnonymous, setReplyIsAnonymous] = useState(true);
+  const [replies, setReplies] = useState<any[]>([]);
+  const [repliesLoading, setRepliesLoading] = useState(false);
+  const [replySubmitting, setReplySubmitting] = useState(false);
 
   const fetchPosts = async () => {
     try {
@@ -55,10 +67,10 @@ export default function CommunityScreen() {
     try {
       const newPost = await apiRequest('/api/community/posts', {
         method: 'POST',
-        body: JSON.stringify({
+        data: {
           content: newPostContent,
           is_anonymous: isAnonymous,
-        }),
+        },
       });
 
       setPosts([newPost, ...posts]);
@@ -70,6 +82,104 @@ export default function CommunityScreen() {
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleLike = async (postId: number, liked: boolean) => {
+    // Throttling logic
+    if (likeDisabled[postId]) return;
+    setLikeClickCounts((prev) => {
+      const count = (prev[postId] || 0) + 1;
+      if (count >= 4) {
+        setLikeDisabled((prevDisabled) => ({ ...prevDisabled, [postId]: true }));
+        // Set timeout to re-enable after 10 seconds
+        if (likeTimeouts.current[postId]) clearTimeout(likeTimeouts.current[postId]);
+        likeTimeouts.current[postId] = setTimeout(() => {
+          setLikeDisabled((prevDisabled) => ({ ...prevDisabled, [postId]: false }));
+          setLikeClickCounts((prevCounts) => ({ ...prevCounts, [postId]: 0 }));
+        }, 10000);
+      }
+      return { ...prev, [postId]: count };
+    });
+
+    // Optimistically update UI
+    setPosts((prevPosts) =>
+      prevPosts.map((post) =>
+        post.id === postId
+          ? {
+              ...post,
+              likes_count: post.likes_count + (liked ? -1 : 1),
+              liked_by_user: !liked,
+            }
+          : post
+      )
+    );
+
+    try {
+      let response;
+      if (liked) {
+        response = await apiRequest(`/api/community/posts/${postId}/like`, {
+          method: 'DELETE',
+        });
+      } else {
+        response = await apiRequest(`/api/community/posts/${postId}/like`, {
+          method: 'POST',
+        });
+      }
+      // Optionally, update with backend count in case of drift
+      setPosts((prevPosts) =>
+        prevPosts.map((post) =>
+          post.id === postId
+            ? { ...post, likes_count: response.likes_count }
+            : post
+        )
+      );
+    } catch (error) {
+      // Do nothing, leave UI as is until refresh
+    }
+  };
+
+  const openReplyModal = async (post: CommunityPost) => {
+    setReplyingToPost(post);
+    setReplyModalVisible(true);
+    setReplyInput('');
+    setReplyIsAnonymous(true);
+    setRepliesLoading(true);
+    try {
+      const data = await apiRequest(`/api/community/posts/${post.id}/replies`);
+      setReplies(data);
+    } catch (e) {
+      setReplies([]);
+    } finally {
+      setRepliesLoading(false);
+    }
+  };
+
+  const submitReply = async () => {
+    if (!replyInput.trim() || !replyingToPost) return;
+    setReplySubmitting(true);
+    // Optimistically update UI
+    const newReply = {
+      id: Date.now(),
+      post_id: replyingToPost.id,
+      user_id: 'me', // or current user id if available
+      content: replyInput,
+      is_anonymous: replyIsAnonymous,
+      created_at: new Date().toISOString(),
+      optimistic: true,
+    };
+    setReplies((prev) => [...prev, newReply]);
+    setReplyInput('');
+    try {
+      const data = await apiRequest(`/api/community/posts/${replyingToPost.id}/replies`, {
+        method: 'POST',
+        data: { content: newReply.content, is_anonymous: newReply.is_anonymous },
+      });
+      // Replace optimistic reply with real one
+      setReplies((prev) => prev.map(r => r.id === newReply.id ? data : r));
+    } catch (e) {
+      // Optionally show error or remove optimistic reply
+    }
+    setReplySubmitting(false);
   };
 
   useEffect(() => {
@@ -131,11 +241,15 @@ export default function CommunityScreen() {
               <Text style={styles.postContent}>{post.content}</Text>
 
               <View style={styles.postActions}>
-                <TouchableOpacity style={styles.actionButton}>
-                  <Ionicons name="heart-outline" size={20} color="#666" />
+                <TouchableOpacity
+                  style={styles.actionButton}
+                  onPress={() => handleLike(post.id, post.liked_by_user)}
+                  disabled={likeDisabled[post.id]}
+                >
+                  <Ionicons name={post.liked_by_user ? "heart" : "heart-outline"} size={20} color={post.liked_by_user ? "#e74c3c" : "#666"} />
                   <Text style={styles.actionText}>{post.likes_count}</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.actionButton}>
+                <TouchableOpacity style={styles.actionButton} onPress={() => openReplyModal(post)}>
                   <Ionicons name="chatbubble-outline" size={20} color="#666" />
                   <Text style={styles.actionText}>Reply</Text>
                 </TouchableOpacity>
@@ -214,6 +328,63 @@ export default function CommunityScreen() {
               </Text>
             </View>
           </ScrollView>
+        </View>
+      </Modal>
+
+      {/* Reply Modal */}
+      <Modal
+        visible={replyModalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setReplyModalVisible(false)}
+      >
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.3)', justifyContent: 'center' }}>
+          <View style={{ backgroundColor: '#fff', margin: 20, borderRadius: 12, padding: 20, maxHeight: '80%' }}>
+            <Text style={{ fontWeight: 'bold', fontSize: 18, marginBottom: 10 }}>Replies</Text>
+            {repliesLoading ? (
+              <ActivityIndicator size="small" color="#8e44ad" />
+            ) : (
+              <ScrollView style={{ maxHeight: 200, marginBottom: 10 }}>
+                {replies.length === 0 ? (
+                  <Text style={{ color: '#888', textAlign: 'center', marginVertical: 10 }}>No replies yet</Text>
+                ) : (
+                  replies.map((reply) => (
+                    <View key={reply.id} style={{ marginBottom: 12, backgroundColor: '#f8f8fa', borderRadius: 8, padding: 10 }}>
+                      <Text style={{ fontWeight: '600', color: '#333' }}>{reply.is_anonymous ? 'Anonymous' : `User ${reply.user_id}`}</Text>
+                      <Text style={{ color: '#444', marginVertical: 2 }}>{reply.content}</Text>
+                      <Text style={{ fontSize: 12, color: '#aaa' }}>{formatDate(reply.created_at)}</Text>
+                    </View>
+                  ))
+                )}
+              </ScrollView>
+            )}
+            <TextInput
+              style={{ borderColor: '#ccc', borderWidth: 1, borderRadius: 8, padding: 8, marginBottom: 10, minHeight: 40 }}
+              placeholder="Write a reply..."
+              value={replyInput}
+              onChangeText={setReplyInput}
+              editable={!replySubmitting}
+              multiline
+            />
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
+              <TouchableOpacity onPress={() => setReplyIsAnonymous(!replyIsAnonymous)} style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Ionicons name={replyIsAnonymous ? 'checkmark-circle' : 'ellipse-outline'} size={20} color={replyIsAnonymous ? '#8e44ad' : '#ccc'} />
+                <Text style={{ marginLeft: 6 }}>Reply anonymously</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
+              <TouchableOpacity onPress={() => setReplyModalVisible(false)} style={{ marginRight: 16 }}>
+                <Text style={{ color: '#888' }}>Close</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={submitReply}
+                disabled={replySubmitting || !replyInput.trim()}
+                style={{ backgroundColor: '#8e44ad', borderRadius: 8, paddingHorizontal: 16, paddingVertical: 8 }}
+              >
+                <Text style={{ color: '#fff', fontWeight: 'bold' }}>{replySubmitting ? 'Posting...' : 'Reply'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         </View>
       </Modal>
     </View>

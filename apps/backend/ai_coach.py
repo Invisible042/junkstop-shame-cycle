@@ -4,6 +4,7 @@ load_dotenv()
 import httpx
 from typing import Optional
 from postgres_client import db_client
+from datetime import datetime
 
 # OpenRouter API configuration
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
@@ -11,7 +12,7 @@ OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
 async def generate_motivation(user_id: int, guilt_rating: int, regret_rating: int, custom_message: Optional[str] = None) -> str:
     """Generate AI-powered motivation message based on user's guilt and regret ratings"""
-    
+    print("we are in generate_motivation func in ai coach.py")
     # Get user's recent patterns
     recent_logs = db_client.execute_query(
         "SELECT * FROM junk_food_logs WHERE user_id = %s ORDER BY created_at DESC LIMIT 10",
@@ -20,8 +21,16 @@ async def generate_motivation(user_id: int, guilt_rating: int, regret_rating: in
     
     # Calculate pattern data
     avg_guilt = sum([log.get("guilt_rating", 0) for log in recent_logs]) / len(recent_logs) if recent_logs else 0
-    total_logs_week = len([log for log in recent_logs if log.get("created_at", "")[:10] >= "2024-01-01"])  # Simplified date check
-    
+    try:
+        week_start = datetime(2024, 1, 1)
+        total_logs_week = len([
+            log for log in recent_logs
+            if isinstance(log.get("created_at"), datetime) and log.get("created_at") >= week_start
+        ])
+    except Exception as e:
+        print(f"Error, failed to get total logs week: {e}")
+        total_logs_week = 0
+          # Simplified date check
     # Create context for AI
     context = f"""
     User just logged junk food with:
@@ -168,8 +177,19 @@ async def analyze_patterns(user_id: int) -> str:
     avg_regret = sum([log.get("regret_rating", 0) for log in logs]) / total_logs
     
     # Time patterns (simplified)
-    morning_logs = len([log for log in logs if "morning" in log.get("created_at", "").lower()])
-    evening_logs = len([log for log in logs if "evening" in log.get("created_at", "").lower()])
+    try:
+        morning_logs = len([
+            log for log in logs
+            if isinstance(log.get("created_at"), datetime) and 5 <= log["created_at"].hour < 12
+        ])
+        evening_logs = len([
+            log for log in logs
+            if isinstance(log.get("created_at"), datetime) and 17 <= log["created_at"].hour < 22
+        ])
+    except Exception as e:
+        print(f"Error analyzing morning/evening logs: {e}")
+        morning_logs = 0
+        evening_logs = 0
     
     if not OPENROUTER_API_KEY:
         return get_fallback_insight(total_logs, avg_guilt, avg_regret)

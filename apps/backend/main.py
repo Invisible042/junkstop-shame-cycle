@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends, File, UploadFile, Form
+from fastapi import FastAPI, HTTPException, Depends, File, UploadFile, Form, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import uvicorn
@@ -183,7 +183,7 @@ async def get_user_profile(current_user: dict = Depends(get_current_user)):
 # Junk food logging endpoints
 @app.post("/api/logs", response_model=JunkFoodLogResponse)
 async def create_log(
-    photo: UploadFile = File(...),
+    photo: Optional[UploadFile] = File(None), 
     food_type: str = Form(...),
     guilt_rating: int = Form(...),
     regret_rating: int = Form(...),
@@ -191,12 +191,20 @@ async def create_log(
     location: Optional[str] = Form(None),
     current_user: dict = Depends(get_current_user)
 ):
+    
     try:
+        # Debug: Log when a request is received and the photo filename
+        print(f"[DEBUG] /api/logs received. Photo filename: {getattr(photo, 'filename', None)}")
+        print(f"[DEBUG] About to upload image for user {current_user['id']}")
+
+        print("hello world")
         # Upload photo
         photo_url = await upload_image(photo, current_user["id"])
-        
+        print(photo_url)
+        print("working here ooo")
         # Estimate calories using AI
         estimated_calories = await estimate_calories(food_type)
+        print("estimated calories", estimated_calories, "type", type(estimated_calories))
         
         # Create log entry
         log = db_client.execute_insert(
@@ -207,7 +215,7 @@ async def create_log(
             """,
             (current_user["id"], photo_url, food_type, guilt_rating, regret_rating, estimated_cost or 0, estimated_calories, location, datetime.utcnow())
         )
-        
+        print(log)
         if not log:
             raise HTTPException(status_code=500, detail="Failed to create log")
         
@@ -216,9 +224,9 @@ async def create_log(
             "UPDATE users SET streak_count = 0 WHERE id = %s",
             (current_user["id"],)
         )
-        
         # Generate AI motivation
         motivation = await generate_motivation(current_user["id"], guilt_rating, regret_rating)
+        print(motivation)
         
         return {
             "id": log["id"],
@@ -229,7 +237,7 @@ async def create_log(
             "estimated_cost": log["estimated_cost"],
             "estimated_calories": log["estimated_calories"],
             "location": log["location"],
-            "created_at": log["created_at"],
+            "created_at": log["created_at"].isoformat() if hasattr(log["created_at"], "isoformat") else str(log["created_at"]),
             "ai_motivation": motivation
         }
     except Exception as e:
@@ -257,7 +265,7 @@ async def get_user_logs(
                 "estimated_cost": log["estimated_cost"],
                 "estimated_calories": log["estimated_calories"],
                 "location": log["location"],
-                "created_at": log["created_at"]
+                "created_at": log["created_at"].isoformat() if hasattr(log["created_at"], "isoformat") else str(log["created_at"])
             }
             for log in logs
         ]
@@ -325,7 +333,10 @@ async def get_weekly_analytics(current_user: dict = Depends(get_current_user)):
         # Daily breakdown
         daily_stats = {}
         for log in logs:
-            date = log["created_at"][:10]  # Get date only
+            if hasattr(log["created_at"], "isoformat"):
+                date = log["created_at"].isoformat()[:10]
+            else:
+                date = str(log["created_at"])[0:10]
             if date not in daily_stats:
                 daily_stats[date] = {"count": 0, "guilt": 0, "regret": 0, "cost": 0, "calories": 0}
             
@@ -379,23 +390,27 @@ async def chat_with_ai(message: ChatMessage, current_user: dict = Depends(get_cu
 
 # Community endpoints
 @app.get("/api/community/posts")
-async def get_community_posts(limit: int = 20, offset: int = 0):
+async def get_community_posts(limit: int = 20, offset: int = 0, current_user: dict = Depends(get_current_user)):
     try:
         posts = db_client.execute_query(
             "SELECT * FROM community_posts WHERE is_anonymous = %s ORDER BY created_at DESC LIMIT %s OFFSET %s",
             (True, limit, offset)
         )
-        
-        return [
-            {
+        result = []
+        for post in posts:
+            liked = db_client.execute_query(
+                "SELECT 1 FROM community_post_likes WHERE user_id = %s AND post_id = %s",
+                (current_user["id"], post["id"])
+            )
+            result.append({
                 "id": post["id"],
                 "content": post["content"],
                 "photo_url": post.get("photo_url"),
                 "likes_count": post.get("likes_count", 0),
-                "created_at": post["created_at"]
-            }
-            for post in posts
-        ]
+                "created_at": post["created_at"],
+                "liked_by_user": bool(liked)
+            })
+        return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -424,6 +439,150 @@ async def create_community_post(
             "likes_count": post["likes_count"],
             "created_at": post["created_at"]
         }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/community/posts/{post_id}/like")
+async def like_community_post(post_id: int, current_user: dict = Depends(get_current_user)):
+    try:
+        # Check if post exists
+        posts = db_client.execute_query(
+            "SELECT * FROM community_posts WHERE id = %s",
+            (post_id,)
+        )
+        if not posts:
+            raise HTTPException(status_code=404, detail="Post not found")
+
+        # Check if user already liked
+        existing_like = db_client.execute_query(
+            "SELECT * FROM community_post_likes WHERE user_id = %s AND post_id = %s",
+            (current_user["id"], post_id)
+        )
+        if existing_like:
+            # If already liked, do nothing and return current count
+            updated_post = db_client.execute_query(
+                "SELECT likes_count FROM community_posts WHERE id = %s",
+                (post_id,)
+            )
+            likes_count = updated_post[0]["likes_count"] if updated_post else None
+            return {"success": True, "likes_count": likes_count}
+
+        # Insert like
+        db_client.execute_insert(
+            """
+            INSERT INTO community_post_likes (user_id, post_id)
+            VALUES (%s, %s)
+            """,
+            (current_user["id"], post_id)
+        )
+
+        # Increment likes_count
+        db_client.execute_update(
+            "UPDATE community_posts SET likes_count = likes_count + 1 WHERE id = %s",
+            (post_id,)
+        )
+
+        # Get updated count
+        updated_post = db_client.execute_query(
+            "SELECT likes_count FROM community_posts WHERE id = %s",
+            (post_id,)
+        )
+        likes_count = updated_post[0]["likes_count"] if updated_post else None
+        return {"success": True, "likes_count": likes_count}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/community/posts/{post_id}/like")
+async def unlike_community_post(post_id: int, current_user: dict = Depends(get_current_user)):
+    try:
+        # Check if post exists
+        posts = db_client.execute_query(
+            "SELECT * FROM community_posts WHERE id = %s",
+            (post_id,)
+        )
+        if not posts:
+            raise HTTPException(status_code=404, detail="Post not found")
+
+        # Check if user has liked
+        existing_like = db_client.execute_query(
+            "SELECT * FROM community_post_likes WHERE user_id = %s AND post_id = %s",
+            (current_user["id"], post_id)
+        )
+        if existing_like:
+            # Delete like
+            db_client.execute_update(
+                "DELETE FROM community_post_likes WHERE user_id = %s AND post_id = %s",
+                (current_user["id"], post_id)
+            )
+            # Decrement likes_count, but not below zero
+            db_client.execute_update(
+                "UPDATE community_posts SET likes_count = GREATEST(likes_count - 1, 0) WHERE id = %s",
+                (post_id,)
+            )
+
+        # Get updated count
+        updated_post = db_client.execute_query(
+            "SELECT likes_count FROM community_posts WHERE id = %s",
+            (post_id,)
+        )
+        likes_count = updated_post[0]["likes_count"] if updated_post else None
+        return {"success": True, "likes_count": likes_count}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/community/posts/{post_id}/replies")
+async def create_reply(post_id: int, content: str = Body(...), is_anonymous: bool = Body(True), current_user: dict = Depends(get_current_user)):
+    try:
+        # Check if post exists
+        posts = db_client.execute_query(
+            "SELECT * FROM community_posts WHERE id = %s",
+            (post_id,)
+        )
+        if not posts:
+            raise HTTPException(status_code=404, detail="Post not found")
+        reply = db_client.execute_insert(
+            """
+            INSERT INTO community_post_replies (post_id, user_id, content, is_anonymous)
+            VALUES (%s, %s, %s, %s)
+            RETURNING *
+            """,
+            (post_id, current_user["id"], content, is_anonymous)
+        )
+        if not reply:
+            raise HTTPException(status_code=500, detail="Failed to create reply")
+        return {
+            "id": reply["id"],
+            "post_id": reply["post_id"],
+            "user_id": reply["user_id"],
+            "content": reply["content"],
+            "is_anonymous": reply["is_anonymous"],
+            "created_at": reply["created_at"]
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/community/posts/{post_id}/replies")
+async def get_replies(post_id: int, current_user: dict = Depends(get_current_user)):
+    try:
+        replies = db_client.execute_query(
+            "SELECT * FROM community_post_replies WHERE post_id = %s ORDER BY created_at ASC",
+            (post_id,)
+        )
+        return [
+            {
+                "id": reply["id"],
+                "post_id": reply["post_id"],
+                "user_id": reply["user_id"],
+                "content": reply["content"],
+                "is_anonymous": reply["is_anonymous"],
+                "created_at": reply["created_at"]
+            }
+            for reply in replies
+        ]
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { apiRequest } from '../utils/api';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 const { width } = Dimensions.get('window');
 
@@ -43,38 +44,36 @@ interface JunkFoodLog {
 }
 
 export default function ProgressScreen() {
-  const [analytics, setAnalytics] = useState<WeeklyAnalytics | null>(null);
-  const [recentLogs, setRecentLogs] = useState<JunkFoodLog[]>([]);
+  const queryClient = useQueryClient();
+
+  const {
+    data: analytics,
+    isLoading: analyticsLoading,
+    refetch: refetchAnalytics,
+  } = useQuery({
+    queryKey: ['weeklyAnalytics'],
+    queryFn: () => apiRequest('/api/analytics/weekly'),
+  });
+
+  const {
+    data: recentLogs,
+    isLoading: logsLoading,
+    refetch: refetchLogs,
+  } = useQuery({
+    queryKey: ['recentLogs'],
+    queryFn: () => apiRequest('/api/logs?limit=5'),
+  });
+
   const [refreshing, setRefreshing] = useState(false);
-
-  const fetchAnalytics = async () => {
-    try {
-      const data = await apiRequest('/api/analytics/weekly');
-      setAnalytics(data);
-    } catch (error) {
-      console.error('Failed to fetch analytics:', error);
-    }
-  };
-
-  const fetchRecentLogs = async () => {
-    try {
-      const data = await apiRequest('/api/logs?limit=5');
-      setRecentLogs(data);
-    } catch (error) {
-      console.error('Failed to fetch recent logs:', error);
-    }
-  };
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([fetchAnalytics(), fetchRecentLogs()]);
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['weeklyAnalytics'] }),
+      queryClient.invalidateQueries({ queryKey: ['recentLogs'] }),
+    ]);
     setRefreshing(false);
   };
-
-  useEffect(() => {
-    fetchAnalytics();
-    fetchRecentLogs();
-  }, []);
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -137,7 +136,7 @@ export default function ProgressScreen() {
           <View style={styles.chartSection}>
             <Text style={styles.sectionTitle}>Daily Breakdown</Text>
             <View style={styles.chart}>
-              {analytics.daily_breakdown.map((day, index) => (
+              {analytics.daily_breakdown.map((day: typeof analytics.daily_breakdown[0], index: number) => (
                 <View key={index} style={styles.chartBar}>
                   <View style={styles.barContainer}>
                     <View
@@ -205,10 +204,10 @@ export default function ProgressScreen() {
         </>
       )}
 
-      {recentLogs.length > 0 && (
+      {recentLogs && (
         <View style={styles.recentSection}>
           <Text style={styles.sectionTitle}>Recent Logs</Text>
-          {recentLogs.map((log) => (
+          {recentLogs.map((log: JunkFoodLog) => (
             <View key={log.id} style={styles.logCard}>
               <View style={styles.logHeader}>
                 <Text style={styles.logFood}>{log.food_type}</Text>

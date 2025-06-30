@@ -92,6 +92,7 @@ export default function LogJunkFoodScreen({ navigation }: LogJunkFoodScreenProps
       const formData = new FormData();
       
       if (photo) {
+        console.log('Uploading photo:', photo);
         formData.append('photo', {
           uri: photo,
           type: 'image/jpeg',

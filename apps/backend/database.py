@@ -38,7 +38,9 @@ class LocalStorageClient:
             "junk_food_logs": [],
             "community_posts": [],
             "achievements": [],
-            "ai_insights": []
+            "ai_insights": [],
+            "community_post_likes": [],
+            "community_post_replies": []
         }
         self.next_ids = {table: 1 for table in self.data.keys()}
     
@@ -221,6 +223,25 @@ DATABASE_SCHEMA = {
             insight_text TEXT NOT NULL,
             insight_type VARCHAR(100),
             generated_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+    """,
+    "community_post_likes": """
+        CREATE TABLE IF NOT EXISTS community_post_likes (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+            post_id INTEGER REFERENCES community_posts(id) ON DELETE CASCADE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE (user_id, post_id)
+        );
+    """,
+    "community_post_replies": """
+        CREATE TABLE IF NOT EXISTS community_post_replies (
+            id SERIAL PRIMARY KEY,
+            post_id INTEGER REFERENCES community_posts(id) ON DELETE CASCADE,
+            user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+            content TEXT NOT NULL,
+            is_anonymous BOOLEAN DEFAULT true,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
     """
 }
