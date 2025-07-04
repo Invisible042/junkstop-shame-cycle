@@ -12,6 +12,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../contexts/AuthContext';
 import { apiRequest } from '../utils/api';
+import { colors, spacing, fontSizes, cardStyle, buttonStyle } from '../styles/theme';
 
 interface UserProfile {
   id: number;
@@ -42,7 +43,7 @@ export default function DashboardScreen({ navigation }: { navigation: any }) {
 
   const fetchDailyInsight = async () => {
     try {
-      const insightData = await apiRequest('/api/ai/daily-insight');
+      const insightData = await apiRequest('/api/ai/daily-insight?max_tokens=40');
       setDailyInsight(insightData.insight);
     } catch (error) {
       console.error('Failed to fetch insight:', error);
@@ -83,96 +84,62 @@ export default function DashboardScreen({ navigation }: { navigation: any }) {
     return "You're a true champion!";
   };
 
+  // Helper to truncate AI insight to 40 tokens (words)
+  const truncateTokens = (text: string, maxTokens: number) => {
+    if (!text) return '';
+    const tokens = text.split(/\s+/);
+    if (tokens.length <= maxTokens) return text;
+    return tokens.slice(0, maxTokens).join(' ') + '...';
+  };
+
   return (
-    <ScrollView
-      style={styles.container}
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-      }
-    >
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
       <LinearGradient
-        colors={['#1a1a2e', '#16213e', '#0f3460']}
-        style={styles.header}
+        colors={['#181c2f', '#23263a']}
+        style={{ ...styles.header, backgroundColor: undefined }}
       >
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-          <View style={styles.welcomeSection}>
-            <Text style={styles.welcomeText}>Welcome back,</Text>
-            <Text style={styles.usernameText}>{user?.username || 'User'}!</Text>
-          </View>
+        <View style={styles.welcomeSection}>
+          <Text style={styles.welcomeText}>Welcome back,</Text>
+          <Text style={styles.usernameText}>{user?.username || 'User'}!</Text>
+        </View>
           <TouchableOpacity onPress={() => navigation.navigate('Settings')} style={{ marginLeft: 12 }}>
-            <Ionicons name="settings-outline" size={26} color="#8e44ad" />
+            <Ionicons name="settings-outline" size={26} color={colors.accent} />
           </TouchableOpacity>
         </View>
-
-        <View style={styles.streakCard}>
-          <View style={styles.streakInfo}>
-            <Text style={styles.streakNumber}>{profile?.streak_count || 0}</Text>
-            <Text style={styles.streakLabel}>Day Streak</Text>
-            <Text style={styles.motivationalText}>
-              {getMotivationalMessage(profile?.streak_count || 0)}
+        {dailyInsight && (
+          <View style={[cardStyle, { marginTop: spacing.lg, marginBottom: spacing.md, backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1 }]}> 
+            <Text style={{ color: colors.green, fontWeight: 'bold', marginBottom: spacing.xs }}>
+              <Ionicons name="bulb" size={16} color={colors.yellow} /> AI Insight
             </Text>
+            <Text style={{ color: colors.textSecondary, fontSize: fontSizes.body }}>
+              {truncateTokens(dailyInsight, 40)}
+            </Text>
+        </View>
+        )}
+        <View style={[cardStyle, { alignItems: 'center', marginTop: spacing.md, marginBottom: spacing.md }]}> 
+          <Text style={{ color: colors.textSecondary, fontSize: fontSizes.body, marginBottom: spacing.sm }}>Days Clean</Text>
+          <Text style={{ color: colors.text, fontSize: 48, fontWeight: 'bold', marginBottom: spacing.xs }}>{profile?.streak_count || 0}</Text>
+        </View>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.md }}>
+          <View style={[cardStyle, { flex: 1, marginRight: spacing.sm, alignItems: 'center', padding: spacing.md }]}> 
+            <Text style={{ color: colors.green, fontSize: fontSizes.subheading, fontWeight: 'bold' }}>${profile?.total_saved?.toFixed(0) || '0'}</Text>
+            <Text style={{ color: colors.textSecondary, fontSize: fontSizes.small }}>Money Saved</Text>
+        </View>
+          <View style={[cardStyle, { flex: 1, marginLeft: spacing.sm, alignItems: 'center', padding: spacing.md }]}> 
+            <Text style={{ color: colors.blue, fontSize: fontSizes.subheading, fontWeight: 'bold' }}>{profile?.avg_guilt_score?.toFixed(1) || '0'}</Text>
+            <Text style={{ color: colors.textSecondary, fontSize: fontSizes.small }}>Avg Guilt Score</Text>
           </View>
-          <TouchableOpacity style={styles.incrementButton} onPress={incrementStreak}>
-            <Ionicons name="add-circle" size={24} color="#fff" />
-            <Text style={styles.incrementText}>Mark Clean Day</Text>
-          </TouchableOpacity>
         </View>
-      </LinearGradient>
-
-      <View style={styles.statsGrid}>
-        <View style={styles.statCard}>
-          <Ionicons name="trophy" size={24} color="#ffd700" />
-          <Text style={styles.statNumber}>{profile?.best_streak || 0}</Text>
-          <Text style={styles.statLabel}>Best Streak</Text>
-        </View>
-
-        <View style={styles.statCard}>
-          <Ionicons name="cash" size={24} color="#4caf50" />
-          <Text style={styles.statNumber}>${profile?.total_saved?.toFixed(0) || '0'}</Text>
-          <Text style={styles.statLabel}>Money Saved</Text>
-        </View>
-
-        <View style={styles.statCard}>
-          <Ionicons name="journal" size={24} color="#2196f3" />
-          <Text style={styles.statNumber}>{profile?.total_logs || 0}</Text>
-          <Text style={styles.statLabel}>Total Logs</Text>
-        </View>
-
-        <View style={styles.statCard}>
-          <Ionicons name="analytics" size={24} color="#ff9800" />
-          <Text style={styles.statNumber}>{profile?.avg_guilt_score?.toFixed(1) || '0'}</Text>
-          <Text style={styles.statLabel}>Avg Guilt</Text>
-        </View>
-      </View>
-
-      {dailyInsight && (
-        <View style={styles.insightCard}>
-          <View style={styles.insightHeader}>
-            <Ionicons name="bulb" size={20} color="#ffd700" />
-            <Text style={styles.insightTitle}>Today's Insight</Text>
-          </View>
-          <Text style={styles.insightText}>{dailyInsight}</Text>
-        </View>
-      )}
-
-      <View style={styles.actionButtons}>
         <TouchableOpacity
-          style={[styles.actionButton, styles.logButton]}
+          style={[buttonStyle, { backgroundColor: colors.accent, marginTop: spacing.md, marginBottom: spacing.md }]}
           onPress={() => navigation.navigate('LogJunkFood')}
         >
-          <Ionicons name="camera" size={24} color="#fff" />
-          <Text style={styles.actionButtonText}>Log Junk Food</Text>
+          <Ionicons name="camera" size={20} color="#fff" style={{ marginRight: 8 }} />
+          <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: fontSizes.body }}>Log Junk Food</Text>
         </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.actionButton, styles.chatButton]}
-          onPress={() => navigation.navigate('Chat')}
-        >
-          <Ionicons name="chatbubbles" size={24} color="#fff" />
-          <Text style={styles.actionButtonText}>Get Support</Text>
-        </TouchableOpacity>
+      </LinearGradient>
       </View>
-    </ScrollView>
   );
 }
 
@@ -270,6 +237,18 @@ const styles = StyleSheet.create({
     marginTop: 4,
     textAlign: 'center',
   },
+  bestStreakIcon: {
+    color: '#ffd700',
+  },
+  moneySavedIcon: {
+    color: '#4caf50',
+  },
+  totalLogsIcon: {
+    color: '#2196f3',
+  },
+  avgGuiltIcon: {
+    color: '#ff9800',
+  },
   insightCard: {
     backgroundColor: '#fff',
     borderRadius: 15,
@@ -293,8 +272,8 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   insightText: {
-    fontSize: 14,
     color: '#666',
+    fontSize: 14,
     lineHeight: 20,
   },
   actionButtons: {

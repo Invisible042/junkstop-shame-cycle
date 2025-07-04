@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends, File, UploadFile, Form, Body
+from fastapi import FastAPI, HTTPException, Depends, File, UploadFile, Form, Body, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import uvicorn
@@ -11,6 +11,7 @@ import io
 from dotenv import load_dotenv
 from pydantic import BaseModel
 from passlib.hash import bcrypt
+import time
 
 from models import *
 from postgres_client import db_client
@@ -41,6 +42,32 @@ app.mount("/uploads", StaticFiles(directory=uploads_dir), name="uploads")
 @app.on_event("startup")
 async def startup_event():
     print("FastAPI server starting...")
+
+# Simple in-memory rate limit store: { (user_id, endpoint): [timestamps] }
+rate_limit_store = {}
+RATE_LIMITS = {
+    'post': (5, 60),  # max 5 posts per 60 seconds
+    'reply': (10, 60),
+    'like': (20, 60),
+}
+
+PROFANITY_LIST = ['badword1', 'badword2', 'shit', 'fuck']  # Add more as needed
+
+def is_profane(text):
+    return any(word in text.lower() for word in PROFANITY_LIST)
+
+def check_rate_limit(user_id, action):
+    now = time.time()
+    key = (user_id, action)
+    max_calls, per_seconds = RATE_LIMITS.get(action, (10, 60))
+    timestamps = rate_limit_store.get(key, [])
+    # Remove old timestamps
+    timestamps = [t for t in timestamps if now - t < per_seconds]
+    if len(timestamps) >= max_calls:
+        return False
+    timestamps.append(now)
+    rate_limit_store[key] = timestamps
+    return True
 
 # Root endpoint
 @app.get("/")
@@ -395,7 +422,7 @@ async def chat_with_ai(message: ChatMessage, current_user: dict = Depends(get_cu
 async def get_community_posts(limit: int = 20, offset: int = 0, current_user: dict = Depends(get_current_user)):
     try:
         posts = db_client.execute_query(
-            "SELECT * FROM community_posts WHERE is_anonymous = %s ORDER BY created_at DESC LIMIT %s OFFSET %s",
+            "SELECT * FROM community_posts_with_reply_count WHERE is_anonymous = %s ORDER BY created_at DESC LIMIT %s OFFSET %s",
             (True, limit, offset)
         )
         result = []
@@ -410,7 +437,8 @@ async def get_community_posts(limit: int = 20, offset: int = 0, current_user: di
                 "photo_url": post.get("photo_url"),
                 "likes_count": post.get("likes_count", 0),
                 "created_at": post["created_at"],
-                "liked_by_user": bool(liked)
+                "liked_by_user": bool(liked),
+                "replies_count": post.get("replies_count", 0)
             })
         return result
     except Exception as e:
@@ -421,6 +449,16 @@ async def create_community_post(
     post_data: CommunityPostCreate,
     current_user: dict = Depends(get_current_user)
 ):
+    # Input validation
+    if not post_data.content or len(post_data.content.strip()) == 0:
+        raise HTTPException(status_code=400, detail="Content cannot be empty.")
+    if len(post_data.content) > 500:
+        raise HTTPException(status_code=400, detail="Content too long (max 500 chars).")
+    if is_profane(post_data.content):
+        raise HTTPException(status_code=400, detail="Inappropriate language detected.")
+    # Rate limit
+    if not check_rate_limit(current_user["id"], 'post'):
+        raise HTTPException(status_code=429, detail="Rate limit exceeded. Please wait.")
     try:
         post = db_client.execute_insert(
             """
@@ -446,6 +484,8 @@ async def create_community_post(
 
 @app.post("/api/community/posts/{post_id}/like")
 async def like_community_post(post_id: int, current_user: dict = Depends(get_current_user)):
+    if not check_rate_limit(current_user["id"], 'like'):
+        raise HTTPException(status_code=429, detail="Rate limit exceeded. Please wait.")
     try:
         # Check if post exists
         posts = db_client.execute_query(
@@ -498,6 +538,8 @@ async def like_community_post(post_id: int, current_user: dict = Depends(get_cur
 
 @app.delete("/api/community/posts/{post_id}/like")
 async def unlike_community_post(post_id: int, current_user: dict = Depends(get_current_user)):
+    if not check_rate_limit(current_user["id"], 'like'):
+        raise HTTPException(status_code=429, detail="Rate limit exceeded. Please wait.")
     try:
         # Check if post exists
         posts = db_client.execute_query(
@@ -538,6 +580,14 @@ async def unlike_community_post(post_id: int, current_user: dict = Depends(get_c
 
 @app.post("/api/community/posts/{post_id}/replies")
 async def create_reply(post_id: int, content: str = Body(...), is_anonymous: bool = Body(True), current_user: dict = Depends(get_current_user)):
+    if not content or len(content.strip()) == 0:
+        raise HTTPException(status_code=400, detail="Reply cannot be empty.")
+    if len(content) > 500:
+        raise HTTPException(status_code=400, detail="Reply too long (max 500 chars).")
+    if is_profane(content):
+        raise HTTPException(status_code=400, detail="Inappropriate language detected.")
+    if not check_rate_limit(current_user["id"], 'reply'):
+        raise HTTPException(status_code=429, detail="Rate limit exceeded. Please wait.")
     try:
         # Check if post exists
         posts = db_client.execute_query(
@@ -598,6 +648,12 @@ class PasswordChangeRequest(BaseModel):
 
 @app.put("/api/user/profile")
 async def update_user_profile(update: UserProfileUpdate, current_user: dict = Depends(get_current_user)):
+    if not update.username or len(update.username.strip()) == 0:
+        raise HTTPException(status_code=400, detail="Username cannot be empty.")
+    if len(update.username) > 32:
+        raise HTTPException(status_code=400, detail="Username too long (max 32 chars).")
+    if update.email and len(update.email) > 100:
+        raise HTTPException(status_code=400, detail="Email too long (max 100 chars).")
     try:
         # Only allow updating username and (optionally) email
         db_client.execute_update(
@@ -642,6 +698,54 @@ async def change_password(req: PasswordChangeRequest, current_user: dict = Depen
         return {"success": True}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/community/posts/{post_id}")
+async def delete_community_post(post_id: int, current_user: dict = Depends(get_current_user)):
+    post = db_client.execute_query(
+        "SELECT * FROM community_posts WHERE id = %s",
+        (post_id,)
+    )
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+    if post[0]["user_id"] != current_user["id"]:
+        raise HTTPException(status_code=403, detail="Not authorized to delete this post.")
+    db_client.execute_update(
+        "DELETE FROM community_posts WHERE id = %s",
+        (post_id,)
+    )
+    return {"success": True}
+
+@app.delete("/api/community/replies/{reply_id}")
+async def delete_reply(reply_id: int, current_user: dict = Depends(get_current_user)):
+    reply = db_client.execute_query(
+        "SELECT * FROM community_post_replies WHERE id = %s",
+        (reply_id,)
+    )
+    if not reply:
+        raise HTTPException(status_code=404, detail="Reply not found")
+    if reply[0]["user_id"] != current_user["id"]:
+        raise HTTPException(status_code=403, detail="Not authorized to delete this reply.")
+    db_client.execute_update(
+        "DELETE FROM community_post_replies WHERE id = %s",
+        (reply_id,)
+    )
+    return {"success": True}
+
+@app.get("/api/user/posts")
+async def get_user_posts(current_user: dict = Depends(get_current_user)):
+    posts = db_client.execute_query(
+        "SELECT * FROM community_posts WHERE user_id = %s ORDER BY created_at DESC",
+        (current_user["id"],)
+    )
+    return posts
+
+@app.get("/api/user/replies")
+async def get_user_replies(current_user: dict = Depends(get_current_user)):
+    replies = db_client.execute_query(
+        "SELECT * FROM community_post_replies WHERE user_id = %s ORDER BY created_at DESC",
+        (current_user["id"],)
+    )
+    return replies
 
 if __name__ == "__main__":
     print("Starting JunkStop FastAPI backend server...")

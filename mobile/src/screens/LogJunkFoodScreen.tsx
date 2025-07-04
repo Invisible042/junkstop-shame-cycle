@@ -5,16 +5,17 @@ import {
   StyleSheet,
   TouchableOpacity,
   TextInput,
-  ScrollView,
   Image,
   Alert,
   KeyboardAvoidingView,
   Platform,
+  ScrollView,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { uploadFile } from '../utils/api';
+import { colors, spacing, fontSizes, cardStyle, buttonStyle } from '../styles/theme';
 
 interface LogJunkFoodScreenProps {
   navigation: any;
@@ -147,7 +148,7 @@ export default function LogJunkFoodScreen({ navigation }: LogJunkFoodScreenProps
     color: string; 
   }) => (
     <View style={styles.ratingContainer}>
-      <Text style={styles.ratingLabel}>{label}: {value}/10</Text>
+      <Text style={[styles.ratingLabel, { color: '#fff' }]}>{label}: {value}/10</Text>
       <View style={styles.ratingButtons}>
         {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((rating) => (
           <TouchableOpacity
@@ -171,108 +172,120 @@ export default function LogJunkFoodScreen({ navigation }: LogJunkFoodScreenProps
   );
 
   return (
-    <KeyboardAvoidingView 
-      style={styles.container} 
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
       <LinearGradient
-        colors={['#e74c3c', '#c0392b']}
-        style={styles.header}
+        colors={['#181c2f', '#23263a']}
+        style={{ ...styles.header, backgroundColor: undefined, paddingHorizontal: spacing.lg }}
       >
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
+        <Text
+          style={{
+            color: colors.accent,
+            fontSize: fontSizes.heading * 1.2,
+            fontWeight: 'bold',
+            textAlign: 'center',
+            marginBottom: spacing.xs,
+            textShadowColor: 'rgba(0,0,0,0.4)',
+            textShadowOffset: { width: 0, height: 2 },
+            textShadowRadius: 6,
+            letterSpacing: 1.2,
+          }}
         >
-          <Ionicons name="arrow-back" size={24} color="#fff" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Log Junk Food</Text>
+          Log Junk Food
+        </Text>
+        <Text
+          style={{
+            color: colors.textSecondary,
+            fontSize: fontSizes.body,
+            textAlign: 'center',
+            marginBottom: spacing.md,
+            paddingHorizontal: spacing.md,
+          }}
+        >
+          Track your cravings and get support
+        </Text>
       </LinearGradient>
+      
+      <ScrollView 
+        style={{ flex: 1 }}
+        contentContainerStyle={{ paddingBottom: spacing.xl }}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={[cardStyle, { marginTop: spacing.lg, backgroundColor: '#23263acc', marginHorizontal: spacing.lg }]}>
+          <View style={styles.photoSection}>
+            <TouchableOpacity style={styles.photoButton} onPress={showImagePicker}>
+              {photo ? (
+                <Image source={{ uri: photo }} style={styles.photoPreview} />
+              ) : (
+                <View style={styles.photoPlaceholder}>
+                  <Ionicons name="camera" size={48} color="#ccc" />
+                  <Text style={styles.photoPlaceholderText}>Add Photo</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.photoSection}>
-          <TouchableOpacity style={styles.photoButton} onPress={showImagePicker}>
-            {photo ? (
-              <Image source={{ uri: photo }} style={styles.photoPreview} />
-            ) : (
-              <View style={styles.photoPlaceholder}>
-                <Ionicons name="camera" size={48} color="#ccc" />
-                <Text style={styles.photoPlaceholderText}>Add Photo</Text>
-              </View>
-            )}
+          <View style={styles.formSection}>
+            <View style={styles.inputGroup}>
+              <Text style={{ color: colors.textSecondary, fontSize: fontSizes.body, marginBottom: spacing.sm }}>What did you eat?</Text>
+              <TextInput
+                style={styles.textInput}
+                value={foodType}
+                onChangeText={setFoodType}
+                placeholder="e.g. Large pizza, candy bar, fast food..."
+                placeholderTextColor="#999"
+              />
+            </View>
+
+            <RatingSlider
+              label="Guilt Level"
+              value={guiltRating}
+              onChange={setGuiltRating}
+              color="#e74c3c"
+            />
+
+            <RatingSlider
+              label="Regret Level"
+              value={regretRating}
+              onChange={setRegretRating}
+              color="#f39c12"
+            />
+
+            <View style={styles.inputGroup}>
+              <Text style={{ color: colors.textSecondary, fontSize: fontSizes.body, marginBottom: spacing.sm }}>Estimated Cost (optional)</Text>
+              <TextInput
+                style={styles.textInput}
+                value={estimatedCost}
+                onChangeText={setEstimatedCost}
+                placeholder="e.g. 15.99"
+                placeholderTextColor="#999"
+                keyboardType="numeric"
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={{ color: colors.textSecondary, fontSize: fontSizes.body, marginBottom: spacing.sm }}>Location (optional)</Text>
+              <TextInput
+                style={styles.textInput}
+                value={location}
+                onChangeText={setLocation}
+                placeholder="e.g. McDonald's, Home, Office..."
+                placeholderTextColor="#999"
+              />
+            </View>
+          </View>
+
+          <TouchableOpacity
+            style={[buttonStyle, { backgroundColor: colors.accent, marginTop: spacing.md }]}
+            onPress={submitLog}
+            disabled={isSubmitting}
+          >
+            <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: fontSizes.body }}>
+              {isSubmitting ? 'Submitting...' : 'Submit'}
+              </Text>
           </TouchableOpacity>
         </View>
-
-        <View style={styles.formSection}>
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>What did you eat? *</Text>
-            <TextInput
-              style={styles.textInput}
-              value={foodType}
-              onChangeText={setFoodType}
-              placeholder="e.g. Large pizza, candy bar, fast food..."
-              placeholderTextColor="#999"
-            />
-          </View>
-
-          <RatingSlider
-            label="Guilt Level"
-            value={guiltRating}
-            onChange={setGuiltRating}
-            color="#e74c3c"
-          />
-
-          <RatingSlider
-            label="Regret Level"
-            value={regretRating}
-            onChange={setRegretRating}
-            color="#f39c12"
-          />
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Estimated Cost (optional)</Text>
-            <TextInput
-              style={styles.textInput}
-              value={estimatedCost}
-              onChangeText={setEstimatedCost}
-              placeholder="e.g. 15.99"
-              placeholderTextColor="#999"
-              keyboardType="numeric"
-            />
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Location (optional)</Text>
-            <TextInput
-              style={styles.textInput}
-              value={location}
-              onChangeText={setLocation}
-              placeholder="e.g. McDonald's, Home, Office..."
-              placeholderTextColor="#999"
-            />
-          </View>
-        </View>
-
-        <TouchableOpacity
-          style={[styles.submitButton, isSubmitting && styles.submitButtonDisabled]}
-          onPress={submitLog}
-          disabled={isSubmitting}
-        >
-          <LinearGradient
-            colors={isSubmitting ? ['#bdc3c7', '#95a5a6'] : ['#27ae60', '#2ecc71']}
-            style={styles.submitButtonGradient}
-          >
-            <Ionicons 
-              name={isSubmitting ? "hourglass" : "checkmark-circle"} 
-              size={24} 
-              color="#fff" 
-            />
-            <Text style={styles.submitButtonText}>
-              {isSubmitting ? 'Submitting...' : 'Log Entry'}
-            </Text>
-          </LinearGradient>
-        </TouchableOpacity>
       </ScrollView>
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
@@ -285,7 +298,6 @@ const styles = StyleSheet.create({
     paddingTop: 50,
     paddingBottom: 20,
     paddingHorizontal: 20,
-    flexDirection: 'row',
     alignItems: 'center',
   },
   backButton: {
@@ -302,7 +314,7 @@ const styles = StyleSheet.create({
   },
   photoSection: {
     alignItems: 'center',
-    marginBottom: 30,
+    marginBottom: 20,
   },
   photoButton: {
     width: 200,
@@ -330,10 +342,10 @@ const styles = StyleSheet.create({
     color: '#999',
   },
   formSection: {
-    marginBottom: 30,
+    marginBottom: 20,
   },
   inputGroup: {
-    marginBottom: 20,
+    marginBottom: 15,
   },
   inputLabel: {
     fontSize: 16,
@@ -350,7 +362,7 @@ const styles = StyleSheet.create({
     borderColor: '#e0e0e0',
   },
   ratingContainer: {
-    marginBottom: 25,
+    marginBottom: 20,
   },
   ratingLabel: {
     fontSize: 16,

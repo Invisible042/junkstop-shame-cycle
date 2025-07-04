@@ -9,10 +9,12 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  FlatList,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { apiRequest } from '../utils/api';
+import { colors, spacing, fontSizes, cardStyle, buttonStyle } from '../styles/theme';
 
 interface ChatMessage {
   id: string;
@@ -100,165 +102,37 @@ export default function ChatScreen({ navigation }: { navigation: any }) {
   };
 
   return (
-    <KeyboardAvoidingView 
-      style={styles.container} 
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
       <LinearGradient
-        colors={['#9b59b6', '#8e44ad']}
-        style={styles.header}
+        colors={['#181c2f', '#23263a']}
+        style={{ paddingTop: spacing.xl, paddingBottom: spacing.md, alignItems: 'center', borderBottomLeftRadius: 24, borderBottomRightRadius: 24 }}
       >
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
-          <Ionicons name="arrow-back" size={24} color="#fff" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>AI Support Chat</Text>
-        <View style={styles.headerRight} />
+        <Text style={{ color: colors.accent, fontSize: fontSizes.heading, fontWeight: 'bold', letterSpacing: 2 }}>Junk Stop</Text>
+        <Text style={{ color: colors.text, fontSize: fontSizes.body, marginTop: spacing.xs }}>Chat Support</Text>
       </LinearGradient>
-
-      <ScrollView
-        ref={scrollViewRef}
-        style={styles.messagesContainer}
-        showsVerticalScrollIndicator={false}
-      >
-        {messages.map((message) => (
-          <View
-            key={message.id}
-            style={[
-              styles.messageWrapper,
-              message.isUser ? styles.userMessageWrapper : styles.aiMessageWrapper,
-            ]}
-          >
-            <View
-              style={[
-                styles.messageBubble,
-                message.isUser ? styles.userMessage : styles.aiMessage,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.messageText,
-                  message.isUser ? styles.userMessageText : styles.aiMessageText,
-                ]}
-              >
-                {message.text}
-              </Text>
-              <Text
-                style={[
-                  styles.messageTime,
-                  message.isUser ? styles.userMessageTime : styles.aiMessageTime,
-                ]}
-              >
-                {formatTime(message.timestamp)}
-              </Text>
-            </View>
-          </View>
-        ))}
-        
-        {isLoading && (
-          <View style={styles.loadingMessage}>
-            <View style={styles.loadingDots}>
-              <View style={[styles.dot, styles.dot1]} />
-              <View style={[styles.dot, styles.dot2]} />
-              <View style={[styles.dot, styles.dot3]} />
-            </View>
+      <FlatList
+        data={messages}
+        renderItem={({ item }) => (
+          <View style={[cardStyle, { marginVertical: spacing.xs, alignSelf: item.isUser ? 'flex-end' : 'flex-start', backgroundColor: item.isUser ? colors.accent : colors.card }]}> 
+            <Text style={{ color: item.isUser ? '#fff' : colors.text }}>{item.text}</Text>
           </View>
         )}
-      </ScrollView>
-
-      <View style={styles.quickResponsesContainer}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.quickResponses}
-        >
-          {quickResponses.map((response, index) => (
-            <TouchableOpacity
-              key={index}
-              style={styles.quickResponseButton}
-              onPress={() => sendQuickResponse(response)}
-            >
-              <Text style={styles.quickResponseText}>{response}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </View>
-
-      <View style={styles.feelingsContainer}>
-        <Text style={styles.feelingsLabel}>How are you feeling? (Optional)</Text>
-        <View style={styles.feelingsRow}>
-          <View style={styles.feelingGroup}>
-            <Text style={styles.feelingLabel}>Guilt:</Text>
-            <View style={styles.ratingButtons}>
-              {[1, 2, 3, 4, 5].map((rating) => (
-                <TouchableOpacity
-                  key={rating}
-                  style={[
-                    styles.ratingButton,
-                    guiltLevel === rating && styles.selectedRating,
-                  ]}
-                  onPress={() => setGuiltLevel(rating)}
-                >
-                  <Text
-                    style={[
-                      styles.ratingText,
-                      guiltLevel === rating && styles.selectedRatingText,
-                    ]}
-                  >
-                    {rating}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-
-          <View style={styles.feelingGroup}>
-            <Text style={styles.feelingLabel}>Regret:</Text>
-            <View style={styles.ratingButtons}>
-              {[1, 2, 3, 4, 5].map((rating) => (
-                <TouchableOpacity
-                  key={rating}
-                  style={[
-                    styles.ratingButton,
-                    regretLevel === rating && styles.selectedRating,
-                  ]}
-                  onPress={() => setRegretLevel(rating)}
-                >
-                  <Text
-                    style={[
-                      styles.ratingText,
-                      regretLevel === rating && styles.selectedRatingText,
-                    ]}
-                  >
-                    {rating}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-        </View>
-      </View>
-
-      <View style={styles.inputContainer}>
+        keyExtractor={item => item.id}
+        contentContainerStyle={{ padding: spacing.lg }}
+      />
+      <View style={{ flexDirection: 'row', alignItems: 'center', padding: spacing.md }}>
         <TextInput
-          style={styles.textInput}
+          style={{ flex: 1, backgroundColor: colors.card, color: colors.text, borderRadius: 16, padding: spacing.sm, marginRight: spacing.sm }}
+          placeholder="Type your message..."
+          placeholderTextColor={colors.textSecondary}
           value={inputText}
           onChangeText={setInputText}
-          placeholder="Type your message..."
-          placeholderTextColor="#999"
-          multiline
         />
-        <TouchableOpacity
-          style={[styles.sendButton, !inputText.trim() && styles.sendButtonDisabled]}
-          onPress={sendMessage}
-          disabled={!inputText.trim() || isLoading}
-        >
-          <Ionicons name="send" size={20} color="#fff" />
+        <TouchableOpacity style={[buttonStyle, { backgroundColor: colors.accent }]} onPress={sendMessage}>
+          <Text style={{ color: '#fff', fontWeight: 'bold' }}>Send</Text>
         </TouchableOpacity>
       </View>
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 

@@ -3,6 +3,7 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityInd
 import { apiRequest } from '../utils/api';
 import { useAuth } from '../contexts/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
+import { colors, spacing, fontSizes, cardStyle, buttonStyle } from '../styles/theme';
 
 export default function SettingsScreen({ navigation }: { navigation: any }) {
   const { user, logout } = useAuth();
@@ -74,64 +75,77 @@ export default function SettingsScreen({ navigation }: { navigation: any }) {
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <ScrollView contentContainerStyle={{ padding: spacing.lg, backgroundColor: colors.background, flexGrow: 1 }}>
       <View style={styles.headerRow}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={{ marginRight: 10 }}>
-          <Ionicons name="arrow-back" size={26} color="#8e44ad" />
+          <Ionicons name="arrow-back" size={26} color={colors.accent} />
         </TouchableOpacity>
-        <Text style={styles.title}>Profile Settings</Text>
+        <Text style={{
+          color: colors.accent,
+          fontSize: fontSizes.heading * 1.1,
+          fontWeight: 'bold',
+          letterSpacing: 1.2,
+          textShadowColor: 'rgba(0,0,0,0.4)',
+          textShadowOffset: { width: 0, height: 2 },
+          textShadowRadius: 6,
+        }}>Profile Settings</Text>
       </View>
-      <View style={{ height: 12 }} />
-      <Text style={styles.label}>Username</Text>
-      <TextInput
-        style={styles.input}
-        value={username}
-        onChangeText={setUsername}
-        autoCapitalize="none"
-      />
-      <Text style={styles.label}>Email</Text>
-      <TextInput
-        style={styles.input}
-        value={email}
-        onChangeText={setEmail}
-        autoCapitalize="none"
-        keyboardType="email-address"
-      />
-      <TouchableOpacity style={styles.saveButton} onPress={handleSaveProfile} disabled={profileLoading}>
-        {profileLoading ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveButtonText}>Save Profile</Text>}
-      </TouchableOpacity>
-      {profileSuccess && <Text style={styles.success}>Profile updated!</Text>}
-      {profileError ? <Text style={styles.error}>{profileError}</Text> : null}
-
-      <Text style={[styles.title, { marginTop: 32 }]}>Change Password</Text>
-      <Text style={styles.label}>Old Password</Text>
-      <TextInput
-        style={styles.input}
-        value={oldPassword}
-        onChangeText={setOldPassword}
-        secureTextEntry
-      />
-      <Text style={styles.label}>New Password</Text>
-      <TextInput
-        style={styles.input}
-        value={newPassword}
-        onChangeText={setNewPassword}
-        secureTextEntry
-      />
-      <Text style={styles.label}>Confirm New Password</Text>
-      <TextInput
-        style={styles.input}
-        value={confirmPassword}
-        onChangeText={setConfirmPassword}
-        secureTextEntry
-      />
-      <TouchableOpacity style={styles.saveButton} onPress={handleChangePassword} disabled={passwordLoading}>
-        {passwordLoading ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveButtonText}>Change Password</Text>}
-      </TouchableOpacity>
-      {passwordSuccess && <Text style={styles.success}>Password changed!</Text>}
-      {passwordError ? <Text style={styles.error}>{passwordError}</Text> : null}
-
-      <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+      <View style={[cardStyle, { backgroundColor: '#23263acc', marginBottom: spacing.lg }]}> 
+        <Text style={styles.label}>Username</Text>
+        <TextInput
+          style={[styles.input, { color: colors.text, backgroundColor: colors.inputBg, borderColor: colors.inputBorder }]}
+          value={username}
+          onChangeText={setUsername}
+          autoCapitalize="none"
+        />
+        <Text style={styles.label}>Email</Text>
+        <TextInput
+          style={[styles.input, { color: colors.text, backgroundColor: colors.inputBg, borderColor: colors.inputBorder }]}
+          value={email}
+          onChangeText={setEmail}
+          autoCapitalize="none"
+          keyboardType="email-address"
+        />
+        <TouchableOpacity style={[buttonStyle, { backgroundColor: colors.accent, marginTop: spacing.md }]} onPress={handleSaveProfile} disabled={profileLoading}>
+          {profileLoading ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveButtonText}>Save Profile</Text>}
+        </TouchableOpacity>
+        {profileSuccess && <Text style={styles.success}>Profile updated!</Text>}
+        {profileError ? <Text style={styles.error}>{profileError}</Text> : null}
+        <TouchableOpacity style={styles.activityButton} onPress={() => navigation.navigate('MyActivity')}>
+          <Ionicons name="list" size={18} color={colors.accent} style={{ marginRight: 8 }} />
+          <Text style={styles.activityButtonText}>View My Posts & Replies</Text>
+        </TouchableOpacity>
+      </View>
+      <View style={[cardStyle, { backgroundColor: '#23263acc', marginBottom: spacing.lg }]}> 
+        <Text style={[styles.title, { color: colors.text, marginTop: 0 }]}>Change Password</Text>
+        <Text style={styles.label}>Old Password</Text>
+        <TextInput
+          style={[styles.input, { color: colors.text, backgroundColor: colors.inputBg, borderColor: colors.inputBorder }]}
+          value={oldPassword}
+          onChangeText={setOldPassword}
+          secureTextEntry
+        />
+        <Text style={styles.label}>New Password</Text>
+        <TextInput
+          style={[styles.input, { color: colors.text, backgroundColor: colors.inputBg, borderColor: colors.inputBorder }]}
+          value={newPassword}
+          onChangeText={setNewPassword}
+          secureTextEntry
+        />
+        <Text style={styles.label}>Confirm New Password</Text>
+        <TextInput
+          style={[styles.input, { color: colors.text, backgroundColor: colors.inputBg, borderColor: colors.inputBorder }]}
+          value={confirmPassword}
+          onChangeText={setConfirmPassword}
+          secureTextEntry
+        />
+        <TouchableOpacity style={[buttonStyle, { backgroundColor: colors.accent, marginTop: spacing.md }]} onPress={handleChangePassword} disabled={passwordLoading}>
+          {passwordLoading ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveButtonText}>Change Password</Text>}
+        </TouchableOpacity>
+        {passwordSuccess && <Text style={styles.success}>Password changed!</Text>}
+        {passwordError ? <Text style={styles.error}>{passwordError}</Text> : null}
+      </View>
+      <TouchableOpacity style={[styles.logoutButton, { backgroundColor: colors.accent }]} onPress={handleLogout}>
         <Text style={styles.logoutButtonText}>Logout</Text>
       </TouchableOpacity>
     </ScrollView>
@@ -205,5 +219,23 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: 'bold',
     fontSize: 16,
+  },
+  activityButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#8e44ad',
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    marginTop: 24,
+    marginBottom: 8,
+    alignSelf: 'flex-start',
+    backgroundColor: '#f8f6ff',
+  },
+  activityButtonText: {
+    color: '#8e44ad',
+    fontWeight: 'bold',
+    fontSize: 15,
   },
 }); 
