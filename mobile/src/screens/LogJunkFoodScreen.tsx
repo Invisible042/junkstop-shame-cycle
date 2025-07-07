@@ -173,10 +173,7 @@ export default function LogJunkFoodScreen({ navigation }: LogJunkFoodScreenProps
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
-      <LinearGradient
-        colors={['#181c2f', '#23263a']}
-        style={{ ...styles.header, backgroundColor: undefined, paddingHorizontal: spacing.lg }}
-      >
+      <View style={{ ...styles.header, backgroundColor: colors.background, paddingHorizontal: spacing.lg }}>
         <Text
           style={{
             color: colors.accent,
@@ -203,86 +200,86 @@ export default function LogJunkFoodScreen({ navigation }: LogJunkFoodScreenProps
         >
           Track your cravings and get support
         </Text>
-      </LinearGradient>
-      
+      </View>
+
       <ScrollView 
         style={{ flex: 1 }}
         contentContainerStyle={{ paddingBottom: spacing.xl }}
         showsVerticalScrollIndicator={false}
       >
-        <View style={[cardStyle, { marginTop: spacing.lg, backgroundColor: '#23263acc', marginHorizontal: spacing.lg }]}>
-          <View style={styles.photoSection}>
-            <TouchableOpacity style={styles.photoButton} onPress={showImagePicker}>
-              {photo ? (
-                <Image source={{ uri: photo }} style={styles.photoPreview} />
-              ) : (
-                <View style={styles.photoPlaceholder}>
-                  <Ionicons name="camera" size={48} color="#ccc" />
-                  <Text style={styles.photoPlaceholderText}>Add Photo</Text>
-                </View>
-              )}
-            </TouchableOpacity>
-          </View>
+        <View style={[cardStyle, { marginTop: spacing.lg, backgroundColor: colors.lightGray, marginHorizontal: spacing.lg }]}>
+        <View style={styles.photoSection}>
+          <TouchableOpacity style={styles.photoButton} onPress={showImagePicker}>
+            {photo ? (
+              <Image source={{ uri: photo }} style={styles.photoPreview} />
+            ) : (
+              <View style={styles.photoPlaceholder}>
+                <Ionicons name="camera" size={48} color="#ccc" />
+                <Text style={styles.photoPlaceholderText}>Add Photo</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        </View>
 
-          <View style={styles.formSection}>
-            <View style={styles.inputGroup}>
+        <View style={styles.formSection}>
+          <View style={styles.inputGroup}>
               <Text style={{ color: colors.textSecondary, fontSize: fontSizes.body, marginBottom: spacing.sm }}>What did you eat?</Text>
-              <TextInput
-                style={styles.textInput}
-                value={foodType}
-                onChangeText={setFoodType}
-                placeholder="e.g. Large pizza, candy bar, fast food..."
-                placeholderTextColor="#999"
-              />
-            </View>
-
-            <RatingSlider
-              label="Guilt Level"
-              value={guiltRating}
-              onChange={setGuiltRating}
-              color="#e74c3c"
+            <TextInput
+              style={styles.textInput}
+              value={foodType}
+              onChangeText={setFoodType}
+              placeholder="e.g. Large pizza, candy bar, fast food..."
+              placeholderTextColor="#999"
             />
-
-            <RatingSlider
-              label="Regret Level"
-              value={regretRating}
-              onChange={setRegretRating}
-              color="#f39c12"
-            />
-
-            <View style={styles.inputGroup}>
-              <Text style={{ color: colors.textSecondary, fontSize: fontSizes.body, marginBottom: spacing.sm }}>Estimated Cost (optional)</Text>
-              <TextInput
-                style={styles.textInput}
-                value={estimatedCost}
-                onChangeText={setEstimatedCost}
-                placeholder="e.g. 15.99"
-                placeholderTextColor="#999"
-                keyboardType="numeric"
-              />
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={{ color: colors.textSecondary, fontSize: fontSizes.body, marginBottom: spacing.sm }}>Location (optional)</Text>
-              <TextInput
-                style={styles.textInput}
-                value={location}
-                onChangeText={setLocation}
-                placeholder="e.g. McDonald's, Home, Office..."
-                placeholderTextColor="#999"
-              />
-            </View>
           </View>
 
-          <TouchableOpacity
+          <RatingSlider
+            label="Guilt Level"
+            value={guiltRating}
+            onChange={setGuiltRating}
+            color="#e74c3c"
+          />
+
+          <RatingSlider
+            label="Regret Level"
+            value={regretRating}
+            onChange={setRegretRating}
+            color="#f39c12"
+          />
+
+          <View style={styles.inputGroup}>
+              <Text style={{ color: colors.textSecondary, fontSize: fontSizes.body, marginBottom: spacing.sm }}>Estimated Cost (optional)</Text>
+            <TextInput
+              style={styles.textInput}
+              value={estimatedCost}
+              onChangeText={setEstimatedCost}
+              placeholder="e.g. 15.99"
+              placeholderTextColor="#999"
+              keyboardType="numeric"
+            />
+          </View>
+
+          <View style={styles.inputGroup}>
+              <Text style={{ color: colors.textSecondary, fontSize: fontSizes.body, marginBottom: spacing.sm }}>Location (optional)</Text>
+            <TextInput
+              style={styles.textInput}
+              value={location}
+              onChangeText={setLocation}
+              placeholder="e.g. McDonald's, Home, Office..."
+              placeholderTextColor="#999"
+            />
+          </View>
+        </View>
+
+        <TouchableOpacity
             style={[buttonStyle, { backgroundColor: colors.accent, marginTop: spacing.md }]}
-            onPress={submitLog}
-            disabled={isSubmitting}
-          >
+          onPress={submitLog}
+          disabled={isSubmitting}
+        >
             <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: fontSizes.body }}>
               {isSubmitting ? 'Submitting...' : 'Submit'}
-              </Text>
-          </TouchableOpacity>
+            </Text>
+        </TouchableOpacity>
         </View>
       </ScrollView>
     </View>
@@ -354,12 +351,12 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   textInput: {
-    backgroundColor: '#fff',
+    backgroundColor: '#e0e0e0',
     borderRadius: 12,
     padding: 15,
     fontSize: 16,
     borderWidth: 1,
-    borderColor: '#e0e0e0',
+    borderColor: colors.border,
   },
   ratingContainer: {
     marginBottom: 20,

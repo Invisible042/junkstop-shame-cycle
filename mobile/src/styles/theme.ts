@@ -1,18 +1,19 @@
 import { ViewStyle } from 'react-native';
 
 export const colors = {
-  background: '#181c2f',
-  card: '#23263a',
-  border: '#2d314d',
-  text: '#fff',
-  textSecondary: '#e0e0e0',
-  accent: '#ef4444',
-  green: '#27ae60',
-  blue: '#3498db',
-  yellow: '#ffd700',
+  background: '#18181b', // app background (very dark)
+  card: '#23263a',      // lighter dark for cards
+  lightGray: '#2a2a31', // even lighter for card surfaces and nav
+  border: '#26272b',
+  text: '#f4f4f5',
+  textSecondary: '#b0b0b8',
+  accent: '#e74c3c',
+  green: '#2ecc71',
+  blue: '#3b82f6',
+  yellow: '#f1c40f',
   gray: '#888',
-  inputBg: '#23263a',
-  inputBorder: '#2d314d',
+  inputBg: '#232323',
+  inputBorder: '#26272b',
 };
 
 export const spacing = {

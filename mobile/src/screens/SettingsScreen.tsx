@@ -20,9 +20,44 @@ export default function SettingsScreen({ navigation }: { navigation: any }) {
   const [passwordSuccess, setPasswordSuccess] = useState(false);
   const [passwordError, setPasswordError] = useState('');
 
+  const [recentPosts, setRecentPosts] = useState<any[]>([]);
+  const [recentReplies, setRecentReplies] = useState<any[]>([]);
+  const [loadingActivity, setLoadingActivity] = useState(true);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [loadingNotifications, setLoadingNotifications] = useState(true);
+
   useEffect(() => {
     setUsername(user?.username || '');
     setEmail(user?.email || '');
+    // Fetch recent posts and replies for preview
+    const fetchActivityPreview = async () => {
+      setLoadingActivity(true);
+      try {
+        const [userPosts, userReplies] = await Promise.all([
+          apiRequest('/api/user/posts'),
+          apiRequest('/api/user/replies'),
+        ]);
+        setRecentPosts(userPosts.slice(0, 2));
+        setRecentReplies(userReplies.slice(0, 2));
+      } catch (e) {
+        // ignore for now
+      }
+      setLoadingActivity(false);
+    };
+    fetchActivityPreview();
+
+    // Fetch notifications
+    const fetchNotifications = async () => {
+      setLoadingNotifications(true);
+      try {
+        const data = await apiRequest('/api/notifications');
+        setNotifications(data);
+      } catch (e) {
+        setNotifications([]);
+      }
+      setLoadingNotifications(false);
+    };
+    fetchNotifications();
   }, [user]);
 
   const handleSaveProfile = async () => {
@@ -78,19 +113,21 @@ export default function SettingsScreen({ navigation }: { navigation: any }) {
     <ScrollView contentContainerStyle={{ padding: spacing.lg, backgroundColor: colors.background, flexGrow: 1 }}>
       <View style={styles.headerRow}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={{ marginRight: 10 }}>
-          <Ionicons name="arrow-back" size={26} color={colors.accent} />
+          <Ionicons name="arrow-back" size={26} color={colors.blue} />
         </TouchableOpacity>
         <Text style={{
-          color: colors.accent,
+          color: colors.blue,
           fontSize: fontSizes.heading * 1.1,
           fontWeight: 'bold',
           letterSpacing: 1.2,
           textShadowColor: 'rgba(0,0,0,0.4)',
           textShadowOffset: { width: 0, height: 2 },
           textShadowRadius: 6,
-        }}>Profile Settings</Text>
+        }}>Settings</Text>
       </View>
-      <View style={[cardStyle, { backgroundColor: '#23263acc', marginBottom: spacing.lg }]}> 
+      {/* Profile Section */}
+      <View style={[cardStyle, { backgroundColor: colors.lightGray, marginBottom: spacing.lg, padding: spacing.lg }]}> 
+        <Text style={{ color: colors.text, fontWeight: 'bold', fontSize: fontSizes.subheading, marginBottom: spacing.md, letterSpacing: 0.5 }}>Profile</Text>
         <Text style={styles.label}>Username</Text>
         <TextInput
           style={[styles.input, { color: colors.text, backgroundColor: colors.inputBg, borderColor: colors.inputBorder }]}
@@ -106,18 +143,89 @@ export default function SettingsScreen({ navigation }: { navigation: any }) {
           autoCapitalize="none"
           keyboardType="email-address"
         />
-        <TouchableOpacity style={[buttonStyle, { backgroundColor: colors.accent, marginTop: spacing.md }]} onPress={handleSaveProfile} disabled={profileLoading}>
+        <TouchableOpacity style={[buttonStyle, { backgroundColor: colors.blue, marginTop: spacing.md }]} onPress={handleSaveProfile} disabled={profileLoading}>
           {profileLoading ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveButtonText}>Save Profile</Text>}
         </TouchableOpacity>
         {profileSuccess && <Text style={styles.success}>Profile updated!</Text>}
         {profileError ? <Text style={styles.error}>{profileError}</Text> : null}
+      </View>
+
+      {/* Activity Section */}
+      <View style={[cardStyle, { backgroundColor: colors.lightGray, marginBottom: spacing.lg, padding: spacing.lg }]}> 
+        <Text style={{ color: colors.text, fontWeight: 'bold', fontSize: fontSizes.subheading, marginBottom: spacing.md, letterSpacing: 0.5 }}>Activity</Text>
         <TouchableOpacity style={styles.activityButton} onPress={() => navigation.navigate('MyActivity')}>
-          <Ionicons name="list" size={18} color={colors.accent} style={{ marginRight: 8 }} />
+          <Ionicons name="list" size={18} color={colors.blue} style={{ marginRight: 8 }} />
           <Text style={styles.activityButtonText}>View My Posts & Replies</Text>
         </TouchableOpacity>
+        {/* Recent Posts Preview */}
+        <View style={{ marginTop: spacing.md }}>
+          <Text style={{ color: colors.text, fontWeight: 'bold', fontSize: fontSizes.body, marginBottom: spacing.xs }}>Recent Posts</Text>
+          {loadingActivity ? <ActivityIndicator color={colors.blue} /> :
+            recentPosts.length === 0 ? <Text style={{ color: colors.gray }}>No posts yet.</Text> :
+            recentPosts.map((post, idx) => (
+              <View key={post.id} style={{ backgroundColor: colors.lightGray, borderRadius: 10, padding: spacing.sm, marginBottom: spacing.xs }}>
+                <Text style={{ color: colors.textSecondary, fontSize: fontSizes.small }}>{post.content}</Text>
+                <Text style={{ color: colors.gray, fontSize: 11, marginTop: 2 }}>Posted {new Date(post.created_at).toLocaleDateString()}</Text>
+              </View>
+            ))
+          }
+          <TouchableOpacity onPress={() => navigation.navigate('MyActivity')} style={{ marginTop: 2 }}>
+            <Text style={{ color: colors.blue, fontWeight: 'bold', fontSize: fontSizes.small }}>See all</Text>
+          </TouchableOpacity>
+        </View>
+        {/* Recent Replies Preview */}
+        <View style={{ marginTop: spacing.md }}>
+          <Text style={{ color: colors.text, fontWeight: 'bold', fontSize: fontSizes.body, marginBottom: spacing.xs }}>Recent Replies</Text>
+          {loadingActivity ? <ActivityIndicator color={colors.blue} /> :
+            recentReplies.length === 0 ? <Text style={{ color: colors.gray }}>No replies yet.</Text> :
+            recentReplies.map((reply, idx) => (
+              <View key={reply.id} style={{ backgroundColor: colors.lightGray, borderRadius: 10, padding: spacing.sm, marginBottom: spacing.xs }}>
+                <Text style={{ color: colors.textSecondary, fontSize: fontSizes.small }}>{reply.content}</Text>
+                <Text style={{ color: colors.gray, fontSize: 11, marginTop: 2 }}>On post #{reply.post_id} • {new Date(reply.created_at).toLocaleDateString()}</Text>
+              </View>
+            ))
+          }
+          <TouchableOpacity onPress={() => navigation.navigate('MyActivity')} style={{ marginTop: 2 }}>
+            <Text style={{ color: colors.blue, fontWeight: 'bold', fontSize: fontSizes.small }}>See all</Text>
+          </TouchableOpacity>
+        </View>
+        {/* Liked Posts Placeholder */}
+        <View style={{ marginTop: spacing.md }}>
+          <Text style={{ color: colors.text, fontWeight: 'bold', fontSize: fontSizes.body, marginBottom: spacing.xs }}>Liked Posts</Text>
+          <Text style={{ color: colors.gray, fontSize: fontSizes.small }}>Coming soon!</Text>
+        </View>
       </View>
-      <View style={[cardStyle, { backgroundColor: '#23263acc', marginBottom: spacing.lg }]}> 
-        <Text style={[styles.title, { color: colors.text, marginTop: 0 }]}>Change Password</Text>
+
+      {/* Notifications Section */}
+      <View style={[cardStyle, { backgroundColor: colors.lightGray, marginBottom: spacing.lg, padding: spacing.lg }]}> 
+        <Text style={{ color: colors.text, fontWeight: 'bold', fontSize: fontSizes.subheading, marginBottom: spacing.md, letterSpacing: 0.5 }}>Notifications</Text>
+        {loadingNotifications ? (
+          <ActivityIndicator color={colors.blue} />
+        ) : notifications.length === 0 ? (
+          <Text style={{ color: colors.gray, fontSize: fontSizes.small }}>No notifications yet.</Text>
+        ) : notifications.map((notif) => (
+          <TouchableOpacity
+            key={notif.id}
+            style={{ backgroundColor: notif.read ? colors.lightGray : colors.card, borderRadius: 10, padding: spacing.sm, marginBottom: spacing.xs }}
+            onPress={async () => {
+              // Navigate to CommunityScreen and scroll to the post (if possible)
+              navigation.navigate('Community', { postId: notif.post_id });
+              // Mark as read in backend
+              try {
+                await apiRequest(`/api/notifications/${notif.id}/read`, { method: 'PATCH' });
+                setNotifications((prev) => prev.map(n => n.id === notif.id ? { ...n, read: true } : n));
+              } catch {}
+            }}
+          >
+            <Text style={{ color: colors.textSecondary, fontSize: fontSizes.body }}>{notif.message}</Text>
+            <Text style={{ color: colors.gray, fontSize: 11, marginTop: 2 }}>{new Date(notif.created_at).toLocaleString()}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {/* Security Section */}
+      <View style={[cardStyle, { backgroundColor: colors.lightGray, marginBottom: spacing.lg, padding: spacing.lg }]}> 
+        <Text style={{ color: colors.text, fontWeight: 'bold', fontSize: fontSizes.subheading, marginBottom: spacing.md, letterSpacing: 0.5 }}>Security</Text>
         <Text style={styles.label}>Old Password</Text>
         <TextInput
           style={[styles.input, { color: colors.text, backgroundColor: colors.inputBg, borderColor: colors.inputBorder }]}
@@ -139,15 +247,19 @@ export default function SettingsScreen({ navigation }: { navigation: any }) {
           onChangeText={setConfirmPassword}
           secureTextEntry
         />
-        <TouchableOpacity style={[buttonStyle, { backgroundColor: colors.accent, marginTop: spacing.md }]} onPress={handleChangePassword} disabled={passwordLoading}>
+        <TouchableOpacity style={[buttonStyle, { backgroundColor: colors.blue, marginTop: spacing.md }]} onPress={handleChangePassword} disabled={passwordLoading}>
           {passwordLoading ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveButtonText}>Change Password</Text>}
         </TouchableOpacity>
         {passwordSuccess && <Text style={styles.success}>Password changed!</Text>}
         {passwordError ? <Text style={styles.error}>{passwordError}</Text> : null}
       </View>
-      <TouchableOpacity style={[styles.logoutButton, { backgroundColor: colors.accent }]} onPress={handleLogout}>
-        <Text style={styles.logoutButtonText}>Logout</Text>
-      </TouchableOpacity>
+
+      {/* Logout Section */}
+      <View style={[cardStyle, { backgroundColor: colors.lightGray, padding: spacing.lg, alignItems: 'center' }]}> 
+        <TouchableOpacity style={[styles.logoutButton, { backgroundColor: 'transparent', borderColor: colors.border, borderWidth: 1, width: '100%' }]} onPress={handleLogout}>
+          <Text style={{ color: colors.accent, fontWeight: 'bold', fontSize: fontSizes.body, textAlign: 'center' }}>Logout</Text>
+        </TouchableOpacity>
+      </View>
     </ScrollView>
   );
 }

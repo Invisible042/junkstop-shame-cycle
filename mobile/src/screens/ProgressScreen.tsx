@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,13 +8,21 @@ import {
   RefreshControl,
   ActivityIndicator,
   Image,
+  TouchableOpacity,
+  Modal,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { apiRequest } from '../utils/api';
+import api, { API_BASE_URL } from '../utils/api';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { colors, spacing, fontSizes, cardStyle, buttonStyle } from '../styles/theme';
 import StreakBadge from '../components/StreakBadge';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { RootStackParamList } from './VideoPreviewScreen'; // Update path if you move the type
+import { GLView } from 'expo-gl';
+import { Renderer } from 'expo-three';
+import * as THREE from 'three';
 
 const { width } = Dimensions.get('window');
 
@@ -51,6 +59,7 @@ interface JunkFoodLog {
 
 export default function ProgressScreen() {
   const queryClient = useQueryClient();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   const {
     data: analytics,
@@ -58,7 +67,7 @@ export default function ProgressScreen() {
     refetch: refetchAnalytics,
   } = useQuery({
     queryKey: ['weeklyAnalytics'],
-    queryFn: () => apiRequest('/api/analytics/weekly'),
+    queryFn: () => api.get('/api/analytics/weekly').then(res => res.data),
   });
 
   const {
@@ -67,10 +76,12 @@ export default function ProgressScreen() {
     refetch: refetchLogs,
   } = useQuery({
     queryKey: ['recentLogs'],
-    queryFn: () => apiRequest('/api/logs?limit=5'),
+    queryFn: () => api.get('/api/logs?limit=5'),
   });
 
   const [refreshing, setRefreshing] = useState(false);
+  const [processing, setProcessing] = useState(false);
+  const [processingMsg, setProcessingMsg] = useState('');
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -89,6 +100,14 @@ export default function ProgressScreen() {
     });
   };
 
+  // Add a helper to format date+time
+  const formatDateTime = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleString('en-US', {
+      month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true
+    });
+  };
+
   const getProgressColor = (value: number, max: number) => {
     const percentage = (value / max) * 100;
     if (percentage < 30) return '#4caf50';
@@ -96,15 +115,99 @@ export default function ProgressScreen() {
     return '#f44336';
   };
 
+  const handleShare = async () => {
+    try {
+      setProcessing(true);
+      setProcessingMsg('Creating your viral video...');
+      // Calculate weekly log count
+      const weekLogCount = analytics?.daily_breakdown?.reduce((sum, d) => sum + d.count, 0) || 0;
+      const avatarVideoFilename = 'video1.mp4'; // Simplified for now, as getAvatarVideoFilename is removed
+      // Call backend to create video share job
+      const res = await api.post('/api/video-share', {
+        input_data: {
+          avatar_video_path: avatarVideoFilename, // just 'video1.mp4'
+        },
+      });
+      const jobId = res.data.id;
+      let status = 'pending';
+      let videoUrl = null;
+      setProcessingMsg('Composing your video...');
+      // Poll for job status
+      while (status === 'pending') {
+        await new Promise(r => setTimeout(r, 2000));
+        const jobRes = await api.get(`/api/video-share/${jobId}/status`);
+        status = jobRes.data.status;
+        if (status === 'complete') {
+          videoUrl = jobRes.data.video_url;
+          break;
+        }
+        if (status === 'failed') {
+          setProcessing(false);
+          alert('Video creation failed: ' + (jobRes.data.error_message || 'Unknown error'));
+          return;
+        }
+      }
+      setProcessingMsg('Preparing to share...');
+      // Download video to local file (required for Sharing.shareAsync)
+      console.log('Video URL to download:', videoUrl);
+      if (!videoUrl) {
+        setProcessing(false);
+        alert('No video URL returned from server.');
+        return;
+      }
+      // If the URL is relative, prepend your backend base URL
+      if (!videoUrl.startsWith('http')) {
+        videoUrl = API_BASE_URL.replace(/\/$/, '') + videoUrl;
+      }
+      const localUri = FileSystem.cacheDirectory + 'viral_share.mp4';
+      await FileSystem.downloadAsync(videoUrl, localUri);
+      setProcessing(false);
+      navigation.navigate('VideoPreview', { localUri });
+    } catch (e) {
+      setProcessing(false);
+      alert('Error sharing video: ' + (e.message || e));
+    }
+  };
+
+  // Add this mapping function near the top of the component
+  const foodTypeToEmoji = (foodType: string) => {
+    const type = foodType.toLowerCase();
+    if (type.includes('pizza')) return '🍕';
+    if (type.includes('burger') || type.includes('cheeseburger')) return '🍔';
+    if (type.includes('fries') || type.includes('chips')) return '🍟';
+    if (type.includes('soda') || type.includes('cola') || type.includes('coke') || type.includes('pepsi')) return '🥤';
+    if (type.includes('candy') || type.includes('bar') || type.includes('chocolate')) return '🍫';
+    if (type.includes('ice cream') || type.includes('sundae')) return '🍦';
+    if (type.includes('donut') || type.includes('doughnut')) return '🍩';
+    if (type.includes('cookie')) return '🍪';
+    if (type.includes('cake')) return '🍰';
+    if (type.includes('popcorn')) return '🍿';
+    if (type.includes('hot dog')) return '🌭';
+    if (type.includes('taco')) return '🌮';
+    if (type.includes('sandwich')) return '🥪';
+    if (type.includes('milkshake')) return '🥤';
+    return '🧁'; // default junk food emoji
+  };
+
+  // When using recentLogs, always default to an array
+  const safeRecentLogs = Array.isArray(recentLogs) ? recentLogs : [];
+
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
+      {/* Fixed Current Streak Badge and Motivational Subtitle */}
+      <View style={{ paddingTop: spacing.xl, paddingBottom: spacing.md, backgroundColor: 'transparent', alignItems: 'center' }}>
+        <StreakBadge streak={analytics?.streak_count || 0} />
+        <Text style={{ color: colors.textSecondary, fontSize: fontSizes.body, marginTop: spacing.xs, marginBottom: spacing.sm, textAlign: 'center' }}>
+          {analytics?.streak_count > 0 ? 'Keep it up! Every day counts.' : 'Start your streak today!'}
+        </Text>
+      </View>
       {(analyticsLoading || logsLoading) && (
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.lg }}>
           <ActivityIndicator size="large" color={colors.accent || '#e74c3c'} />
             </View>
       )}
       {!(analyticsLoading || logsLoading) && (
-        <ScrollView contentContainerStyle={{ padding: spacing.lg }}>
+        <ScrollView contentContainerStyle={{ padding: spacing.lg, paddingTop: 0 }}>
           {(!analytics || !recentLogs) ? (
             <View style={{ alignItems: 'center', marginTop: spacing.xl }}>
               <Text style={{ color: colors.textSecondary, fontSize: fontSizes.body, textAlign: 'center' }}>
@@ -113,144 +216,120 @@ export default function ProgressScreen() {
             </View>
           ) : (
             <>
-              {/* Streak Badge Section */}
-              <StreakBadge streak={analytics.streak_count || 0} />
-
-              {/* Streak Progress Journey */}
-              <View style={[cardStyle, { marginBottom: spacing.lg, backgroundColor: '#23263acc', minHeight: 320 }]}>
-                <Text style={{ color: colors.text, fontWeight: 'bold', fontSize: fontSizes.heading, textAlign: 'center', marginBottom: spacing.xs }}>
-                  Your Journey
-                </Text>
-                <Text style={{ color: colors.textSecondary, fontSize: fontSizes.small, textAlign: 'center', marginBottom: spacing.md, paddingHorizontal: spacing.lg }}>
-                  Visualize your streak progress as your inner world changes
-                </Text>
-                
-                {/* Progress Indicator */}
-                <View style={styles.progressIndicator}>
-                  {[1, 2, 3, 4, 5].map((dot, index) => (
-                    <View 
-                      key={index} 
-                      style={[
-                        styles.progressDot,
-                        index === 0 ? styles.progressDotActive : styles.progressDotInactive
-                      ]} 
-                    />
-                  ))}
-                </View>
-
-                <ScrollView 
-                  horizontal 
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.streakScrollContainer}
-                >
-                  {/* Left Arrow Hint */}
-                  <View style={styles.leftArrowHint}>
-                    <Ionicons name="chevron-back" size={20} color="rgba(255,255,255,0.3)" />
-                  </View>
-
-                  {[
-                    { image: require('../../assets/streak1 (2).png'), label: 'Day 0', title: 'Rock Bottom', unlocked: true },
-                    { image: require('../../assets/streak2 (2).png'), label: 'Day 3', title: 'Getting Started', unlocked: analytics.streak_count >= 3 },
-                    { image: require('../../assets/streak3 (2).png'), label: 'Day 5', title: 'Building Habits', unlocked: analytics.streak_count >= 5 },
-                    { image: require('../../assets/streak4 (2).png'), label: 'Day 7+', title: 'On Track', unlocked: analytics.streak_count >= 7 },
-                    { image: require('../../assets/streak5.png'), label: 'Day 30+', title: 'Thriving', unlocked: analytics.streak_count >= 30 },
-                  ].map((stage, index) => (
-                    <View key={index} style={styles.streakStage}>
-                      <View style={[
-                        styles.streakCard,
-                        !stage.unlocked && styles.streakCardLocked
-                      ]}>
-                        <Image 
-                          source={stage.image} 
-                          style={[
-                            styles.streakImage,
-                            !stage.unlocked && styles.streakImageBlurred
-                          ]} 
-                        />
-                        {!stage.unlocked && (
-                          <View style={styles.lockOverlay}>
-                            <Ionicons name="lock-closed" size={28} color="#fff" />
-                            <Text style={styles.lockMessage}>
-                              {index === 1 ? "Reach Day 3 to unlock!" :
-                               index === 2 ? "Reach Day 5 to unlock!" :
-                               index === 3 ? "Reach Day 7 to unlock!" :
-                               "Reach Day 30 to unlock!"}
-                            </Text>
-                          </View>
-                        )}
-                        <View style={styles.streakCardContent}>
-                          <Text style={[
-                            styles.streakLabel,
-                            stage.unlocked ? styles.streakLabelUnlocked : styles.streakLabelLocked
-                          ]}>
-                            {stage.label}
-                          </Text>
-                          <Text style={[
-                            styles.streakTitle,
-                            stage.unlocked ? styles.streakTitleUnlocked : styles.streakTitleLocked
-                          ]}>
-                            {stage.title}
-                          </Text>
-                          <Text style={[
-                            styles.streakMotivation,
-                            stage.unlocked ? styles.streakMotivationUnlocked : styles.streakMotivationLocked
-                          ]}>
-                            {stage.unlocked ? 
-                              (index === 0 ? "You've taken the first step!" :
-                               index === 1 ? "Great progress, keep going!" :
-                               index === 2 ? "You're building amazing habits!" :
-                               index === 3 ? "You're on fire! 🔥" :
-                               "You're absolutely thriving! 🌟") :
-                              (index === 1 ? "Just 3 more days to unlock!" :
-                               index === 2 ? "5 days away from this milestone!" :
-                               index === 3 ? "7 days to reach this goal!" :
-                               "30 days to become unstoppable!")
-                            }
-                          </Text>
-                        </View>
-                      </View>
-                      {index < 4 && (
-                        <View style={styles.arrowContainer}>
-                          <Ionicons 
-                            name="chevron-forward" 
-                            size={24} 
-                            color={stage.unlocked ? colors.accent : '#666'} 
-                          />
-                        </View>
-                      )}
-                    </View>
-                  ))}
-                </ScrollView>
-              </View>
+              {/* 3D Reflection Card - now with Three.js scene */}
+              <GLView
+                style={{ width: '100%', height: 380, borderRadius: 36, backgroundColor: '#181a2a', overflow: 'hidden', marginBottom: spacing.lg }}
+                onContextCreate={async (gl) => {
+                  const { drawingBufferWidth: w, drawingBufferHeight: h } = gl;
+                  const renderer = new Renderer({ gl });
+                  renderer.setSize(w, h);
+                  renderer.setClearColor(0x181a2a, 1);
+                  const scene = new THREE.Scene();
+                  scene.fog = new THREE.Fog(0x181a2a, 10, 50);
+                  const camera = new THREE.PerspectiveCamera(75, w / h, 0.1, 1000);
+                  camera.position.z = 5;
+                  const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+                  scene.add(ambientLight);
+                  const dirLight = new THREE.DirectionalLight(0xffffff, 0.5);
+                  dirLight.position.set(5, 10, 7.5);
+                  scene.add(dirLight);
+                  // --- Avatar Placeholder: Spinning Cube ---
+                  const geometry = new THREE.BoxGeometry(1, 1, 1);
+                  const material = new THREE.MeshStandardMaterial({ color: 0x00c6fb });
+                  const cube = new THREE.Mesh(geometry, material);
+                  scene.add(cube);
+                  // --- Junk Food Items: 3D Spheres as Placeholders ---
+                  const junkMeshes = [];
+                  const logCount = Array.isArray(recentLogs) ? recentLogs.length : 0;
+                  for (let i = 0; i < logCount; i++) {
+                    // Position items in a semi-circle around the avatar
+                    const angle = (Math.PI / (logCount + 1)) * (i + 1) - Math.PI / 2;
+                    const radius = 2.5;
+                    const x = Math.cos(angle) * radius;
+                    const y = -1.2;
+                    const z = Math.sin(angle) * radius;
+                    // Use a different color for each food type (placeholder)
+                    const log = recentLogs[i];
+                    let color = 0xffc300; // default yellow
+                    if (log.food_type.toLowerCase().includes('pizza')) color = 0xffa500;
+                    if (log.food_type.toLowerCase().includes('burger')) color = 0x8d5524;
+                    if (log.food_type.toLowerCase().includes('fries')) color = 0xffe066;
+                    if (log.food_type.toLowerCase().includes('soda')) color = 0x00bfff;
+                    if (log.food_type.toLowerCase().includes('candy')) color = 0xff69b4;
+                    if (log.food_type.toLowerCase().includes('ice cream')) color = 0xfaf0e6;
+                    if (log.food_type.toLowerCase().includes('donut')) color = 0xf7cac9;
+                    if (log.food_type.toLowerCase().includes('cookie')) color = 0xd2b48c;
+                    if (log.food_type.toLowerCase().includes('cake')) color = 0xf5e6ff;
+                    // TODO: Swap for custom 3D models or textures per food type
+                    const sphereGeo = new THREE.SphereGeometry(0.35, 32, 32);
+                    const sphereMat = new THREE.MeshStandardMaterial({ color });
+                    const mesh = new THREE.Mesh(sphereGeo, sphereMat);
+                    mesh.position.set(x, y, z);
+                    scene.add(mesh);
+                    junkMeshes.push(mesh);
+                  }
+                  // --- Animate falling in for new items (simple drop effect) ---
+                  let dropProgress = 0;
+                  const dropDuration = 40; // frames
+                  const animate = () => {
+                    requestAnimationFrame(animate);
+                    cube.rotation.x += 0.01;
+                    cube.rotation.y += 0.01;
+                    // Animate the last junk item dropping in
+                    if (junkMeshes.length > 0 && dropProgress < dropDuration) {
+                      const mesh = junkMeshes[junkMeshes.length - 1];
+                      mesh.position.y = -1.2 + (2.5 * (1 - dropProgress / dropDuration));
+                      dropProgress++;
+                    }
+                    renderer.render(scene, camera);
+                    gl.endFrameEXP();
+                  };
+                  animate();
+                }}
+              />
+              {/* Share Progress Button */}
+              <TouchableOpacity onPress={handleShare} style={{ alignSelf: 'center', backgroundColor: '#00c6fb', borderRadius: 22, paddingVertical: 10, paddingHorizontal: 28, flexDirection: 'row', alignItems: 'center', marginBottom: spacing.lg, shadowColor: '#00c6fb', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.18, shadowRadius: 8, elevation: 4 }}>
+                <Ionicons name="share-social-outline" size={20} color="#fff" style={{ marginRight: 8 }} />
+                <Text style={{ fontSize: 16, color: '#fff', fontWeight: 'bold' }}>Share Progress</Text>
+              </TouchableOpacity>
+              {/* Processing Modal */}
+              <Modal visible={processing} transparent animationType="fade">
+                <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', alignItems: 'center' }}>
+                  <View style={{ backgroundColor: '#23263a', borderRadius: 18, padding: 32, alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 12 }}>
+                    <ActivityIndicator size="large" color={colors.accent || '#e74c3c'} />
+                    <Text style={{ color: colors.text, fontSize: 18, marginTop: 18, textAlign: 'center' }}>{processingMsg || 'Processing...'}</Text>
+            </View>
+          </View>
+              </Modal>
 
               {/* Summary Cards */}
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginBottom: spacing.lg }}>
-                <View style={[cardStyle, { width: '48%', marginBottom: spacing.md, alignItems: 'center' }]}> 
+                <View style={[cardStyle, { width: '48%', marginBottom: spacing.md, alignItems: 'center', backgroundColor: colors.lightGray }]}> 
                   <Ionicons name="flame" size={24} color="#ffd700" style={{ marginBottom: 4 }} />
                   <Text style={{ color: '#ffd700', fontWeight: 'bold', fontSize: 24 }}>{analytics.best_streak || 0}</Text>
                   <Text style={{ color: '#fff', fontSize: 12 }}>Best Streak</Text>
               </View>
-                <View style={[cardStyle, { width: '48%', marginBottom: spacing.md, alignItems: 'center' }]}> 
+                <View style={[cardStyle, { width: '48%', marginBottom: spacing.md, alignItems: 'center', backgroundColor: colors.lightGray }]}> 
                   <Ionicons name="cash" size={24} color="#27ae60" style={{ marginBottom: 4 }} />
                   <Text style={{ color: '#27ae60', fontWeight: 'bold', fontSize: 24 }}>${analytics.total_cost?.toFixed(0) || 0}</Text>
                   <Text style={{ color: '#fff', fontSize: 12 }}>Money Saved</Text>
             </View>
-                <View style={[cardStyle, { width: '48%', marginBottom: spacing.md, alignItems: 'center' }]}> 
+                <View style={[cardStyle, { width: '48%', marginBottom: spacing.md, alignItems: 'center', backgroundColor: colors.lightGray }]}> 
                   <Ionicons name="journal" size={24} color="#2196f3" style={{ marginBottom: 4 }} />
                   <Text style={{ color: '#2196f3', fontWeight: 'bold', fontSize: 24 }}>{analytics.total_logs || 0}</Text>
                   <Text style={{ color: '#fff', fontSize: 12 }}>Total Logs</Text>
           </View>
-                <View style={[cardStyle, { width: '48%', marginBottom: spacing.md, alignItems: 'center' }]}> 
+                <View style={[cardStyle, { width: '48%', marginBottom: spacing.md, alignItems: 'center', backgroundColor: colors.lightGray }]}> 
                   <Ionicons name="bar-chart" size={24} color="#ff9800" style={{ marginBottom: 4 }} />
                   <Text style={{ color: '#ff9800', fontWeight: 'bold', fontSize: 24 }}>{analytics.avg_guilt_score?.toFixed(1) || 0}</Text>
                   <Text style={{ color: '#fff', fontSize: 12 }}>Avg Guilt</Text>
                 </View>
-                <View style={[cardStyle, { width: '48%', marginBottom: spacing.md, alignItems: 'center' }]}> 
+                <View style={[cardStyle, { width: '48%', marginBottom: spacing.md, alignItems: 'center', backgroundColor: colors.lightGray }]}> 
                   <Ionicons name="heart" size={24} color="#9b59b6" style={{ marginBottom: 4 }} />
                   <Text style={{ color: '#9b59b6', fontWeight: 'bold', fontSize: 24 }}>{analytics.avg_regret_score?.toFixed(1) || 0}</Text>
                   <Text style={{ color: '#fff', fontSize: 12 }}>Avg Regret</Text>
-                </View>
-                <View style={[cardStyle, { width: '48%', marginBottom: spacing.md, alignItems: 'center' }]}> 
+              </View>
+                <View style={[cardStyle, { width: '48%', marginBottom: spacing.md, alignItems: 'center', backgroundColor: colors.lightGray }]}> 
                   <Ionicons name="nutrition" size={24} color="#00b894" style={{ marginBottom: 4 }} />
                   <Text style={{ color: '#00b894', fontWeight: 'bold', fontSize: 24 }}>{analytics.total_calories || 0}</Text>
                   <Text style={{ color: '#fff', fontSize: 12 }}>Total Calories</Text>
@@ -349,10 +428,10 @@ export default function ProgressScreen() {
 
               {/* Recent Logs */}
               <View style={{
-                backgroundColor: 'rgba(36, 40, 60, 0.7)',
-                borderRadius: 28,
+                backgroundColor: colors.lightGray,
+                borderRadius: 24,
                 marginBottom: spacing.lg,
-                padding: spacing.lg,
+                padding: spacing.md,
                 borderWidth: 1,
                 borderColor: 'rgba(255,255,255,0.08)',
                 shadowColor: '#000',
@@ -363,15 +442,15 @@ export default function ProgressScreen() {
                 overflow: 'hidden',
               }}>
                 <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 20, marginBottom: 12, textAlign: 'center', letterSpacing: 0.5, textShadowColor: '#000', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 }}>Recent Logs</Text>
-                {recentLogs.length === 0 ? (
+                {safeRecentLogs.length === 0 ? (
                   <View style={{ alignItems: 'center', padding: spacing.lg }}>
                     <Ionicons name="cloud-outline" size={48} color="#00c6fb" style={{ marginBottom: 8 }} />
                     <Text style={{ color: '#fff', fontSize: 16, fontWeight: 'bold', marginBottom: 4 }}>No logs yet.</Text>
                     <Text style={{ color: '#b2f7ef', fontSize: 13, fontStyle: 'italic', textAlign: 'center' }}>Start logging to see your journey take shape!</Text>
                   </View>
                 ) : (
-                  recentLogs.map((log, idx) => (
-                    <View key={log.id || idx} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 18 }}>
+                  safeRecentLogs.map((log, idx) => (
+                    <View key={log.id || idx} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: idx === safeRecentLogs.length - 1 ? 0 : 18 }}>
                       {log.photo_url ? (
                         <View style={{
                           width: 52,
@@ -386,69 +465,28 @@ export default function ProgressScreen() {
                           <Image source={{ uri: log.photo_url }} style={{ width: '100%', height: '100%', borderRadius: 13 }} />
                         </View>
                       ) : (
-                        <View style={{ width: 52, height: 52, borderRadius: 16, backgroundColor: '#23263a', marginRight: 16, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#444' }}>
+                        <View style={{ width: 52, height: 52, borderRadius: 16, backgroundColor: colors.lightGray, marginRight: 16, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#444' }}>
                           <Ionicons name="fast-food-outline" size={28} color="#666" />
                         </View>
                       )}
                       <View style={{ flex: 1 }}>
-                        <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 17, marginBottom: 2 }}>{log.food_type}</Text>
+                        <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 18, marginBottom: 2, letterSpacing: 0.2 }}>{log.food_type}</Text>
+                        <Text style={{ color: '#b2f7ef', fontSize: 13, fontWeight: '600', marginBottom: 2 }}>{formatDateTime(log.created_at)}</Text>
                         <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
-                          <Text style={{
-                            backgroundColor: 'rgba(255,255,255,0.13)',
-                            color: '#00c6fb',
-                            fontSize: 12,
-                            borderRadius: 10,
-                            paddingHorizontal: 10,
-                            paddingVertical: 2,
-                            marginRight: 8,
-                          }}>{formatDate(log.created_at)}</Text>
-                          {log.location && (
-                            <Text style={{ color: '#b2f7ef', fontStyle: 'italic', fontSize: 12 }}>@ {log.location}</Text>
-                          )}
-                        </View>
-                        <View style={{ flexDirection: 'row', marginBottom: 2 }}>
-                          <Text style={{
-                            backgroundColor: 'rgba(255,255,255,0.13)',
-                            color: '#00c6fb',
-                            fontSize: 12,
-                            borderRadius: 8,
-                            paddingHorizontal: 8,
-                            paddingVertical: 2,
-                            marginRight: 6,
-                            fontWeight: 'bold',
-                          }}>Guilt: {log.guilt_rating}</Text>
-                          <Text style={{
-                            backgroundColor: 'rgba(255,255,255,0.13)',
-                            color: '#00c6fb',
-                            fontSize: 12,
-                            borderRadius: 8,
-                            paddingHorizontal: 8,
-                            paddingVertical: 2,
-                            marginRight: 6,
-                            fontWeight: 'bold',
-                          }}>Regret: {log.regret_rating}</Text>
-                          <Text style={{
-                            backgroundColor: 'rgba(255,255,255,0.13)',
-                            color: '#00c6fb',
-                            fontSize: 12,
-                            borderRadius: 8,
-                            paddingHorizontal: 8,
-                            paddingVertical: 2,
-                            fontWeight: 'bold',
-                          }}>Cost: ${log.estimated_cost}</Text>
+                          <Text style={{ color: '#fff', fontSize: 13, marginRight: 10 }}>Guilt: {log.guilt_rating}</Text>
+                          <Text style={{ color: '#fff', fontSize: 13, marginRight: 10 }}>Regret: {log.regret_rating}</Text>
+                          <Text style={{ color: '#fff', fontSize: 13 }}>${log.estimated_cost?.toFixed(2) || 0}</Text>
                         </View>
                         {log.ai_motivation && (
-                          <Text style={{ color: '#b2b7c3', fontStyle: 'italic', fontSize: 12, marginTop: 2 }}>
-                            “{log.ai_motivation}”
-                          </Text>
+                          <Text style={{ color: '#ffd700', fontSize: 12, fontStyle: 'italic', marginTop: 2 }}>{log.ai_motivation}</Text>
                         )}
                       </View>
                     </View>
-                  ))
+                  )).reduce((acc, el, idx, arr) => acc.concat(el, idx < arr.length - 1 ? <View key={'divider-' + idx} style={{ height: 1, backgroundColor: 'rgba(255,255,255,0.08)', marginVertical: 8, borderRadius: 1 }} /> : null), [])
                 )}
               </View>
             </>
-          )}
+              )}
         </ScrollView>
       )}
     </View>

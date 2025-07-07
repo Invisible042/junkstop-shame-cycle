@@ -9,15 +9,9 @@ interface StreakBadgeProps {
 export default function StreakBadge({ streak }: StreakBadgeProps) {
   const getBadgeContent = () => {
     if (streak === 0) {
-      return { icon: "🧭", label: "Today's Streak" };
-    } else if (streak <= 2) {
-      return { icon: "🟡", label: `Streak: ${streak} Days` };
-    } else if (streak <= 4) {
-      return { icon: "🔵", label: `Streak: ${streak} Days` };
-    } else if (streak <= 6) {
-      return { icon: "🟢", label: `Streak: ${streak} Days` };
+      return { icon: "🧭", label: "Current Streak: 0 Days" };
     } else {
-      return { icon: "🔥", label: `Streak: ${streak} Days` };
+      return { icon: streak <= 2 ? "🟡" : streak <= 4 ? "🔵" : streak <= 6 ? "🟢" : "🔥", label: `Current Streak: ${streak} Days` };
     }
   };
 

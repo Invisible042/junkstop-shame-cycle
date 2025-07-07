@@ -4,7 +4,7 @@ from fastapi.staticfiles import StaticFiles
 import uvicorn
 import os
 from datetime import datetime, timedelta
-from typing import List, Optional
+from typing import List, Optional, Any
 import base64
 from PIL import Image
 import io
@@ -12,6 +12,10 @@ from dotenv import load_dotenv
 from pydantic import BaseModel
 from passlib.hash import bcrypt
 import time
+import json
+from fastapi import BackgroundTasks
+import subprocess
+import traceback
 
 from models import *
 from postgres_client import db_client
@@ -68,6 +72,138 @@ def check_rate_limit(user_id, action):
     timestamps.append(now)
     rate_limit_store[key] = timestamps
     return True
+
+def compose_video_from_images(image_paths, output_path, duration=5):
+    """
+    Compose a video from a list of image file paths using ffmpeg.
+    Each image is shown for 'duration' seconds.
+    """
+    list_file = 'input_images.txt'
+    with open(list_file, 'w') as f:
+        for img in image_paths:
+            f.write(f"file '{img}'\n")
+            f.write(f"duration {duration}\n")
+        f.write(f"file '{image_paths[-1]}'\n")
+    cmd = [
+        'ffmpeg',
+        '-y',
+        '-f', 'concat',
+        '-safe', '0',
+        '-i', list_file,
+        '-vf', 'format=yuv420p',
+        '-movflags', '+faststart',
+        output_path
+    ]
+    subprocess.run(cmd, check=True)
+    os.remove(list_file)
+
+def compose_viral_video_with_overlays(base_video_path, overlays, output_path):
+    """
+    Compose a viral video by overlaying animated GIFs, labels, and sound effects on top of a base video.
+    overlays: list of dicts with keys: gif_path, label, x, y, start, end, sound_path
+    """
+    import shlex
+    import subprocess
+    filter_complex = []
+    input_args = ['-i', base_video_path]
+    gif_input_indices = []
+    audio_input_indices = []
+    input_idx = 1  # 0 is base video
+
+    # Build input_args and track indices
+    for overlay in overlays:
+        # Add GIF
+        input_args += ['-ignore_loop', '0', '-i', overlay['gif_path']]
+        gif_input_indices.append(input_idx)
+        input_idx += 1
+        # Add sound if present
+        if overlay.get('sound_path'):
+            input_args += ['-ss', str(overlay['start']), '-t', str(overlay['end'] - overlay['start']), '-i', overlay['sound_path']]
+            audio_input_indices.append(input_idx)
+            input_idx += 1
+
+    # Build overlay filters
+    last_stream = '[0:v]'
+    audio_streams = []
+    gif_idx = 0
+    audio_idx = 0
+    for idx, overlay in enumerate(overlays):
+        gif_stream = f'[{gif_input_indices[gif_idx]}:v]'
+        out_stream = f'[v{idx+1}]'
+        overlay_filter = (
+            f"{last_stream}{gif_stream} overlay=x={overlay['x']}:y={overlay['y']}:shortest=1:enable='between(t,{overlay['start']},{overlay['end']})'{out_stream}"
+        )
+        filter_complex.append(overlay_filter)
+        label_filter = (
+            f"{out_stream} drawtext=text='{overlay['label']}':fontcolor=white:fontsize=32:x={overlay['x']}:y={overlay['y']}+100:enable='between(t,{overlay['start']},{overlay['end']})'[v{idx+1}l]"
+        )
+        filter_complex.append(label_filter)
+        last_stream = f'[v{idx+1}l]'
+        gif_idx += 1
+        # Audio stream for this overlay
+        if overlay.get('sound_path'):
+            audio_streams.append(f'[{audio_input_indices[audio_idx]}:a]')
+            audio_idx += 1
+
+    # Mix only overlay audio streams (mute base video audio)
+    if audio_streams:
+        amix_filter = f'{"".join(audio_streams)}amix=inputs={len(audio_streams)}:duration=longest[aout]'
+        filter_complex.append(amix_filter)
+        map_audio = ['-map', '[aout]']
+    else:
+        # No overlay audio, use anullsrc (silence)
+        filter_complex.append('anullsrc=r=44100:cl=stereo[aout]')
+        map_audio = ['-map', '[aout]']
+
+    filter_complex_str = '; '.join(filter_complex)
+    cmd = [
+        'ffmpeg',
+        '-y',
+        '-loglevel', 'error',  # Only show errors
+        *input_args,
+        '-filter_complex', filter_complex_str,
+        '-map', last_stream,
+        *map_audio,
+        '-movflags', '+faststart',
+        '-pix_fmt', 'yuv420p',
+        '-shortest',
+        output_path
+    ]
+    print('Running ffmpeg command:', ' '.join(cmd))
+    result = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+    if result.returncode != 0:
+        print("ffmpeg error output:\n", result.stderr)
+        result.check_returncode()
+
+def boomerang_video(input_path, output_path):
+    """
+    Create a boomerang (forward + reverse) loop from input_path and save to output_path.
+    """
+    import tempfile
+    import shutil
+    # 1. Reverse the video (excluding last frame to avoid stutter)
+    reversed_path = tempfile.mktemp(suffix='.mp4')
+    # Reverse video
+    reverse_cmd = [
+        'ffmpeg', '-y', '-i', input_path,
+        '-vf', 'reverse',
+        '-af', 'areverse',
+        reversed_path
+    ]
+    subprocess.run(reverse_cmd, check=True)
+    # 2. Concatenate forward and reversed videos
+    concat_list = tempfile.mktemp(suffix='.txt')
+    with open(concat_list, 'w') as f:
+        f.write(f"file '{os.path.abspath(input_path)}'\n")
+        f.write(f"file '{os.path.abspath(reversed_path)}'\n")
+    concat_cmd = [
+        'ffmpeg', '-y', '-f', 'concat', '-safe', '0', '-i', concat_list,
+        '-c', 'copy', output_path
+    ]
+    subprocess.run(concat_cmd, check=True)
+    # Cleanup
+    os.remove(reversed_path)
+    os.remove(concat_list)
 
 # Root endpoint
 @app.get("/")
@@ -494,7 +630,7 @@ async def like_community_post(post_id: int, current_user: dict = Depends(get_cur
         )
         if not posts:
             raise HTTPException(status_code=404, detail="Post not found")
-
+        post = posts[0]
         # Check if user already liked
         existing_like = db_client.execute_query(
             "SELECT * FROM community_post_likes WHERE user_id = %s AND post_id = %s",
@@ -523,6 +659,22 @@ async def like_community_post(post_id: int, current_user: dict = Depends(get_cur
             "UPDATE community_posts SET likes_count = likes_count + 1 WHERE id = %s",
             (post_id,)
         )
+
+        # Notification: only if liker is not the post owner
+        if post["user_id"] != current_user["id"]:
+            db_client.execute_insert(
+                """
+                INSERT INTO notifications (user_id, type, post_id, message, created_at)
+                VALUES (%s, %s, %s, %s, %s)
+                """,
+                (
+                    post["user_id"],
+                    'like',
+                    post_id,
+                    f"Your post received a like!",
+                    datetime.utcnow()
+                )
+            )
 
         # Get updated count
         updated_post = db_client.execute_query(
@@ -596,6 +748,7 @@ async def create_reply(post_id: int, content: str = Body(...), is_anonymous: boo
         )
         if not posts:
             raise HTTPException(status_code=404, detail="Post not found")
+        post = posts[0]
         reply = db_client.execute_insert(
             """
             INSERT INTO community_post_replies (post_id, user_id, content, is_anonymous)
@@ -606,6 +759,22 @@ async def create_reply(post_id: int, content: str = Body(...), is_anonymous: boo
         )
         if not reply:
             raise HTTPException(status_code=500, detail="Failed to create reply")
+        # Notification: only if replier is not the post owner
+        if post["user_id"] != current_user["id"]:
+            db_client.execute_insert(
+                """
+                INSERT INTO notifications (user_id, type, post_id, reply_id, message, created_at)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    post["user_id"],
+                    'reply',
+                    post_id,
+                    reply["id"],
+                    f"Your post received a reply!",
+                    datetime.utcnow()
+                )
+            )
         return {
             "id": reply["id"],
             "post_id": reply["post_id"],
@@ -746,6 +915,111 @@ async def get_user_replies(current_user: dict = Depends(get_current_user)):
         (current_user["id"],)
     )
     return replies
+
+@app.get("/api/notifications")
+async def get_notifications(current_user: dict = Depends(get_current_user)):
+    try:
+        notifications = db_client.execute_query(
+            """
+            SELECT id, post_id, reply_id, message, type, read, created_at
+            FROM notifications
+            WHERE user_id = %s
+            ORDER BY created_at DESC
+            LIMIT 50
+            """,
+            (current_user["id"],)
+        )
+        return notifications
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.patch("/api/notifications/{notification_id}/read")
+async def mark_notification_read(notification_id: int, current_user: dict = Depends(get_current_user)):
+    try:
+        db_client.execute_update(
+            "UPDATE notifications SET read = TRUE WHERE id = %s AND user_id = %s",
+            (notification_id, current_user["id"])
+        )
+        return {"success": True}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# --- 3D Scene Export Job System ---
+# (Simple version: accepts a base64 image, saves it, and tracks job status)
+
+# You should create a new table in your DB for scene_exports:
+# CREATE TABLE scene_exports (
+#   id SERIAL PRIMARY KEY,
+#   user_id INTEGER NOT NULL,
+#   status VARCHAR(20) NOT NULL,
+#   file_url TEXT,
+#   created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+#   updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+# );
+
+@app.post("/api/export-scene")
+async def export_scene(
+    image_base64: str = Body(...),
+    background_tasks: BackgroundTasks = None,
+    current_user: dict = Depends(get_current_user)
+):
+    # Insert job into DB
+    job = db_client.execute_insert(
+        """
+        INSERT INTO scene_exports (user_id, status, created_at, updated_at)
+        VALUES (%s, %s, NOW(), NOW()) RETURNING *
+        """,
+        (current_user["id"], "pending")
+    )
+    if not job:
+        raise HTTPException(status_code=500, detail="Failed to create export job")
+    background_tasks.add_task(process_scene_export_job, job["id"], image_base64)
+    return {
+        "id": job["id"],
+        "status": "pending",
+        "created_at": job["created_at"],
+        "updated_at": job["updated_at"]
+    }
+
+@app.get("/api/export-scene/{job_id}/status")
+async def get_export_scene_status(job_id: int, current_user: dict = Depends(get_current_user), request: Request = None):
+    jobs = db_client.execute_query(
+        "SELECT * FROM scene_exports WHERE id = %s AND user_id = %s",
+        (job_id, current_user["id"])
+    )
+    if not jobs:
+        raise HTTPException(status_code=404, detail="Job not found")
+    job = jobs[0]
+    # If file_url is present and relative, make it absolute
+    file_url = job.get("file_url")
+    if file_url and not file_url.startswith("http"):
+        base_url = str(request.base_url).rstrip("/")
+        job["file_url"] = base_url + file_url
+    return job
+
+def process_scene_export_job(job_id: int, image_base64: str):
+    import os
+    from datetime import datetime
+    try:
+        uploads_dir = "/tmp/uploads"
+        os.makedirs(uploads_dir, exist_ok=True)
+        output_filename = f"scene_export_{job_id}.png"
+        output_path = os.path.join(uploads_dir, output_filename)
+        # Save the base64 image to file
+        with open(output_path, "wb") as f:
+            f.write(base64.b64decode(image_base64))
+        # Update job status and file_url
+        db_client.execute_update(
+            "UPDATE scene_exports SET status = %s, file_url = %s, updated_at = %s WHERE id = %s",
+            ("complete", f"/uploads/{output_filename}", datetime.utcnow(), job_id)
+        )
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        db_client.execute_update(
+            "UPDATE scene_exports SET status = %s, file_url = %s, updated_at = %s WHERE id = %s",
+            ("failed", None, datetime.utcnow(), job_id)
+        )
 
 if __name__ == "__main__":
     print("Starting JunkStop FastAPI backend server...")

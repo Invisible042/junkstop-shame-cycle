@@ -6,6 +6,7 @@ import LogJunkFoodScreen from '../screens/LogJunkFoodScreen';
 import ProgressScreen from '../screens/ProgressScreen';
 import CommunityScreen from '../screens/CommunityScreen';
 import ChatScreen from '../screens/ChatScreen';
+import { colors } from '../styles/theme';
 
 const Tab = createBottomTabNavigator();
 
@@ -34,8 +35,8 @@ export default function MainTabNavigator() {
         tabBarActiveTintColor: '#ef4444',
         tabBarInactiveTintColor: '#71717a',
         tabBarStyle: {
-          backgroundColor: '#1a1a2e',
-          borderTopColor: 'rgba(255, 255, 255, 0.1)',
+          backgroundColor: colors.background,
+          borderTopColor: '#26272b',
           borderTopWidth: 1,
           paddingBottom: 8,
           paddingTop: 8,

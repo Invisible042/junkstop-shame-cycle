@@ -40,7 +40,8 @@ class LocalStorageClient:
             "achievements": [],
             "ai_insights": [],
             "community_post_likes": [],
-            "community_post_replies": []
+            "community_post_replies": [],
+            "video_shares": []
         }
         self.next_ids = {table: 1 for table in self.data.keys()}
     
@@ -242,6 +243,18 @@ DATABASE_SCHEMA = {
             content TEXT NOT NULL,
             is_anonymous BOOLEAN DEFAULT true,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+    """,
+    "video_shares": """
+        CREATE TABLE IF NOT EXISTS video_shares (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+            input_data JSONB NOT NULL,
+            status VARCHAR(20) NOT NULL DEFAULT 'pending',
+            video_url TEXT,
+            error_message TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
     """
 }

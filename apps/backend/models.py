@@ -92,3 +92,16 @@ class Achievement(BaseModel):
     badge_name: str
     description: str
     earned_date: str
+
+class VideoShareCreate(BaseModel):
+    input_data: dict  # e.g., log IDs, overlays, etc.
+
+class VideoShareResponse(BaseModel):
+    id: int
+    user_id: int
+    input_data: dict
+    status: str
+    video_url: Optional[str] = None
+    error_message: Optional[str] = None
+    created_at: str
+    updated_at: str

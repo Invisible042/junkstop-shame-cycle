@@ -16,6 +16,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { apiRequest } from '../utils/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, spacing, fontSizes, cardStyle, buttonStyle } from '../styles/theme';
+import { useRoute, RouteProp } from '@react-navigation/native';
+import { View as RNView } from 'react-native';
 
 interface CommunityPost {
   id: number;
@@ -27,6 +29,10 @@ interface CommunityPost {
   shame_level?: number;
   pride_level?: number;
   replies_count?: number;
+}
+
+interface CommunityRouteParams {
+  postId?: number;
 }
 
 export default function CommunityScreen() {
@@ -47,6 +53,10 @@ export default function CommunityScreen() {
   const [repliesLoading, setRepliesLoading] = useState(false);
   const [replySubmitting, setReplySubmitting] = useState(false);
   const STORAGE_KEY = '@junkstop/community_posts';
+  const scrollViewRef = useRef<ScrollView>(null);
+  const postRefs = useRef<{ [key: number]: React.RefObject<RNView> }>({});
+  const route = useRoute<RouteProp<Record<string, CommunityRouteParams>, string>>();
+  const postId = route.params?.postId;
 
   const fetchPosts = async () => {
     try {
@@ -228,6 +238,20 @@ export default function CommunityScreen() {
     }
   };
 
+  useEffect(() => {
+    if (postId && posts.length > 0) {
+      const idx = posts.findIndex((p) => p.id === postId);
+      if (idx !== -1 && postRefs.current[postId]?.current) {
+        postRefs.current[postId]?.current?.measureLayout(
+          scrollViewRef.current?.getInnerViewNode?.() || scrollViewRef.current,
+          (x, y) => {
+            scrollViewRef.current?.scrollTo({ y: y - 20, animated: true });
+          }
+        );
+      }
+    }
+  }, [postId, posts]);
+
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     const now = new Date();
@@ -245,6 +269,7 @@ export default function CommunityScreen() {
         <Text style={{ color: colors.textSecondary, fontSize: fontSizes.body, textAlign: 'center', marginBottom: spacing.md }}>Share your struggles, support others</Text>
       </View>
       <ScrollView
+        ref={scrollViewRef}
         style={{ flex: 1, backgroundColor: 'transparent' }}
         contentContainerStyle={{ padding: spacing.lg, paddingTop: 0, paddingBottom: spacing.xl }}
         refreshControl={
@@ -260,42 +285,49 @@ export default function CommunityScreen() {
             </Text>
           </View>
         ) : (
-          posts.map((post) => (
-            <View key={post.id} style={[{...cardStyle}, styles.postCard]}> 
-              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: spacing.xs }}>
-                <Ionicons name="person-circle" size={28} color={colors.gray} />
-                <Text style={{ color: colors.textSecondary, fontWeight: 'bold', marginLeft: spacing.xs }}>Anonymous</Text>
-                <Text style={{ color: colors.gray, fontSize: fontSizes.small, marginLeft: spacing.sm }}>{formatDate(post.created_at)}</Text>
-              </View>
-              <Text style={{ color: colors.text, fontSize: fontSizes.body, marginBottom: spacing.sm }}>{post.content}</Text>
-              {/* Example: Show shame/pride level if present */}
-              {post.shame_level && (
-                <Text style={{ color: colors.accent, fontWeight: 'bold', fontSize: fontSizes.small, marginBottom: spacing.xs }}>Shame Level: {post.shame_level}/10</Text>
-              )}
-              {post.pride_level && (
-                <Text style={{ color: colors.green, fontWeight: 'bold', fontSize: fontSizes.small, marginBottom: spacing.xs }}>Pride Level: {post.pride_level}/10</Text>
-              )}
+          posts.map((post) => {
+            if (!postRefs.current[post.id]) postRefs.current[post.id] = React.createRef<RNView>();
+            return (
+              <RNView
+                key={post.id}
+                ref={postRefs.current[post.id]}
+                style={[{...cardStyle}, styles.postCard]}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: spacing.xs }}>
+                  <Ionicons name="person-circle" size={28} color={colors.gray} />
+                  <Text style={{ color: colors.textSecondary, fontWeight: 'bold', marginLeft: spacing.xs }}>Anonymous</Text>
+                  <Text style={{ color: colors.gray, fontSize: fontSizes.small, marginLeft: spacing.sm }}>{formatDate(post.created_at)}</Text>
+                </View>
+                <Text style={{ color: colors.text, fontSize: fontSizes.body, marginBottom: spacing.sm }}>{post.content}</Text>
+                {/* Example: Show shame/pride level if present */}
+                {post.shame_level && (
+                  <Text style={{ color: colors.accent, fontWeight: 'bold', fontSize: fontSizes.small, marginBottom: spacing.xs }}>Shame Level: {post.shame_level}/10</Text>
+                )}
+                {post.pride_level && (
+                  <Text style={{ color: colors.green, fontWeight: 'bold', fontSize: fontSizes.small, marginBottom: spacing.xs }}>Pride Level: {post.pride_level}/10</Text>
+                )}
               <View style={styles.postActions}>
-                <TouchableOpacity style={styles.actionButton} onPress={() => {}}>
-                  <Ionicons name="thumbs-up" size={16} color={colors.green} style={{ marginRight: 6 }} />
-                  <Text style={[styles.actionText, { color: colors.text }]} numberOfLines={1} ellipsizeMode="tail">You got this!</Text>
+                  <TouchableOpacity style={styles.actionButton} onPress={() => {}}>
+                    <Ionicons name="thumbs-up" size={16} color={colors.green} style={{ marginRight: 6 }} />
+                    <Text style={[styles.actionText, { color: colors.text }]} numberOfLines={1} ellipsizeMode="tail">You got this!</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.actionButton} onPress={() => handleLike(post.id, post.liked_by_user)} disabled={likeDisabled[post.id]}>
+                    <Ionicons name={post.liked_by_user ? "heart" : "heart-outline"} size={20} color={post.liked_by_user ? colors.accent : colors.gray} />
+                    <Text style={styles.actionText} numberOfLines={1} ellipsizeMode="tail">{post.likes_count}</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.actionButton} onPress={() => handleLike(post.id, post.liked_by_user)} disabled={likeDisabled[post.id]}>
-                  <Ionicons name={post.liked_by_user ? "heart" : "heart-outline"} size={20} color={post.liked_by_user ? colors.accent : colors.gray} />
-                  <Text style={styles.actionText} numberOfLines={1} ellipsizeMode="tail">{post.likes_count}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.actionButton} onPress={() => openReplyModal(post)}>
-                  <Ionicons name="chatbubble-outline" size={20} color={colors.blue} />
-                  <Text style={styles.actionText} numberOfLines={1} ellipsizeMode="tail">{typeof post.replies_count === 'number' ? post.replies_count : 0}</Text>
-                  <Text style={[styles.actionText, { color: colors.text }]} numberOfLines={1} ellipsizeMode="tail">Reply</Text>
+                  <TouchableOpacity style={styles.actionButton} onPress={() => openReplyModal(post)}>
+                    <Ionicons name="chatbubble-outline" size={20} color={colors.blue} />
+                    <Text style={styles.actionText} numberOfLines={1} ellipsizeMode="tail">{typeof post.replies_count === 'number' ? post.replies_count : 0}</Text>
+                    <Text style={[styles.actionText, { color: colors.text }]} numberOfLines={1} ellipsizeMode="tail">Reply</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.actionButton}>
-                  <Ionicons name="share-outline" size={20} color={colors.yellow} />
-                  <Text style={[styles.actionText, { color: colors.text }]} numberOfLines={1} ellipsizeMode="tail">Share</Text>
+                    <Ionicons name="share-outline" size={20} color={colors.yellow} />
+                    <Text style={[styles.actionText, { color: colors.text }]} numberOfLines={1} ellipsizeMode="tail">Share</Text>
                 </TouchableOpacity>
               </View>
-            </View>
-          ))
+              </RNView>
+            );
+          })
         )}
       </ScrollView>
 

@@ -13,6 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../contexts/AuthContext';
 import { apiRequest } from '../utils/api';
 import { colors, spacing, fontSizes, cardStyle, buttonStyle } from '../styles/theme';
+import { Video, ResizeMode } from 'expo-av';
 
 interface UserProfile {
   id: number;
@@ -94,10 +95,7 @@ export default function DashboardScreen({ navigation }: { navigation: any }) {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
-      <LinearGradient
-        colors={['#181c2f', '#23263a']}
-        style={{ ...styles.header, backgroundColor: undefined }}
-      >
+      <View style={{ ...styles.header, backgroundColor: colors.background }}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
         <View style={styles.welcomeSection}>
           <Text style={styles.welcomeText}>Welcome back,</Text>
@@ -107,39 +105,42 @@ export default function DashboardScreen({ navigation }: { navigation: any }) {
             <Ionicons name="settings-outline" size={26} color={colors.accent} />
           </TouchableOpacity>
         </View>
-        {dailyInsight && (
-          <View style={[cardStyle, { marginTop: spacing.lg, marginBottom: spacing.md, backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1 }]}> 
-            <Text style={{ color: colors.green, fontWeight: 'bold', marginBottom: spacing.xs }}>
-              <Ionicons name="bulb" size={16} color={colors.yellow} /> AI Insight
-            </Text>
-            <Text style={{ color: colors.textSecondary, fontSize: fontSizes.body }}>
-              {truncateTokens(dailyInsight, 40)}
-            </Text>
+        {/* AI Insights Card */}
+        <View style={[cardStyle, { marginTop: spacing.xs, marginBottom: spacing.sm, backgroundColor: colors.lightGray, borderColor: colors.border, borderWidth: 1, alignItems: 'center', padding: spacing.md }]}> 
+          <Text style={{ color: colors.green, fontWeight: 'bold', marginBottom: spacing.xs, fontSize: fontSizes.body }}>
+            <Ionicons name="sparkles-outline" size={16} color={colors.green} /> AI Insight
+          </Text>
+          <Text style={{ color: colors.textSecondary, fontSize: fontSizes.small, marginBottom: spacing.xs, fontStyle: 'italic' }}>
+            Personalized for you
+          </Text>
+          <Text style={{ color: colors.text, fontSize: fontSizes.body, textAlign: 'center', marginTop: spacing.xs }}>
+            {dailyInsight ? truncateTokens(dailyInsight, 40) : 'No insight available today.'}
+          </Text>
         </View>
-        )}
-        <View style={[cardStyle, { alignItems: 'center', marginTop: spacing.md, marginBottom: spacing.md }]}> 
-          <Text style={{ color: colors.textSecondary, fontSize: fontSizes.body, marginBottom: spacing.sm }}>Days Clean</Text>
-          <Text style={{ color: colors.text, fontSize: 48, fontWeight: 'bold', marginBottom: spacing.xs }}>{profile?.streak_count || 0}</Text>
+        {/* End AI Insights Card */}
+        <View style={[cardStyle, { alignItems: 'center', marginTop: spacing.sm, marginBottom: spacing.sm, padding: spacing.md, backgroundColor: colors.lightGray }]}> 
+          <Text style={{ color: colors.textSecondary, fontSize: fontSizes.small, marginBottom: spacing.xs }}>Days Clean</Text>
+          <Text style={{ color: colors.text, fontSize: 40, fontWeight: 'bold', marginBottom: spacing.xs }}>{profile?.streak_count || 0}</Text>
         </View>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.md }}>
-          <View style={[cardStyle, { flex: 1, marginRight: spacing.sm, alignItems: 'center', padding: spacing.md }]}> 
-            <Text style={{ color: colors.green, fontSize: fontSizes.subheading, fontWeight: 'bold' }}>${profile?.total_saved?.toFixed(0) || '0'}</Text>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.sm }}>
+          <View style={[cardStyle, { flex: 1, marginRight: spacing.xs, alignItems: 'center', padding: spacing.sm, backgroundColor: colors.lightGray }]}> 
+            <Text style={{ color: colors.green, fontSize: 24, fontWeight: 'bold' }}>${profile?.total_saved?.toFixed(0) || '0'}</Text>
             <Text style={{ color: colors.textSecondary, fontSize: fontSizes.small }}>Money Saved</Text>
         </View>
-          <View style={[cardStyle, { flex: 1, marginLeft: spacing.sm, alignItems: 'center', padding: spacing.md }]}> 
-            <Text style={{ color: colors.blue, fontSize: fontSizes.subheading, fontWeight: 'bold' }}>{profile?.avg_guilt_score?.toFixed(1) || '0'}</Text>
+          <View style={[cardStyle, { flex: 1, marginLeft: spacing.xs, alignItems: 'center', padding: spacing.sm, backgroundColor: colors.lightGray }]}> 
+            <Text style={{ color: colors.text, fontSize: 24, fontWeight: 'bold' }}>{profile?.avg_guilt_score?.toFixed(1) || '0'}</Text>
             <Text style={{ color: colors.textSecondary, fontSize: fontSizes.small }}>Avg Guilt Score</Text>
           </View>
         </View>
         <TouchableOpacity
-          style={[buttonStyle, { backgroundColor: colors.accent, marginTop: spacing.md, marginBottom: spacing.md }]}
+          style={[buttonStyle, { backgroundColor: colors.accent, marginTop: spacing.sm, marginBottom: spacing.sm }]}
           onPress={() => navigation.navigate('LogJunkFood')}
         >
-          <Ionicons name="camera" size={20} color="#fff" style={{ marginRight: 8 }} />
+          <Ionicons name="camera" size={18} color="#fff" style={{ marginRight: 6 }} />
           <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: fontSizes.body }}>Log Junk Food</Text>
         </TouchableOpacity>
-      </LinearGradient>
       </View>
+    </View>
   );
 }
 
