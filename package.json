@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "backend": "cmd /c \"venv\\Scripts\\activate && cd apps\\backend && python ..\\..\\start_backend.py\"",
+    "backend": "cd apps/backend && venv\\Scripts\\activate && python ..\\..\\start_backend.py",
     "frontend": "cd mobile && npm start",
     "dev": "concurrently --raw \"npm run backend\" \"npm run frontend\"",
     "install:frontend": "cd mobile && npm install",
@@ -16,7 +16,11 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "fastapi": "^0.0.8"
+    "@react-three/drei": "^10.5.0",
+    "@react-three/fiber": "^9.2.0",
+    "fastapi": "^0.0.8",
+    "react-native-webview": "^13.15.0",
+    "three": "^0.178.0"
   },
   "devDependencies": {
     "concurrently": "^9.2.0"

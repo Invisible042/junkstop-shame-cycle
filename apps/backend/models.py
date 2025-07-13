@@ -42,7 +42,7 @@ class JunkFoodLogCreate(BaseModel):
 
 class JunkFoodLogResponse(BaseModel):
     id: int
-    photo_url: str
+    photo_url: Optional[str] = None
     food_type: str
     guilt_rating: int
     regret_rating: int

@@ -20,9 +20,7 @@ import StreakBadge from '../components/StreakBadge';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from './VideoPreviewScreen'; // Update path if you move the type
-import { GLView } from 'expo-gl';
-import { Renderer } from 'expo-three';
-import * as THREE from 'three';
+import * as FileSystem from 'expo-file-system';
 
 const { width } = Dimensions.get('window');
 
@@ -76,12 +74,42 @@ export default function ProgressScreen() {
     refetch: refetchLogs,
   } = useQuery({
     queryKey: ['recentLogs'],
-    queryFn: () => api.get('/api/logs?limit=5'),
+    queryFn: () => api.get('/api/logs?limit=1000'), // fetch all logs
   });
 
   const [refreshing, setRefreshing] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [processingMsg, setProcessingMsg] = useState('');
+  const [selectedLog, setSelectedLog] = useState<JunkFoodLog | null>(null);
+  const [webViewKey, setWebViewKey] = useState(0); // for force reload
+
+  // Calculate junk score (example: avg guilt * total logs)
+  const junkScore = analytics && analytics.total_logs ? Math.round((analytics.avg_guilt_score || 0) * analytics.total_logs) : 0;
+
+  // Prepare logs for WebView
+  const logsForWebView = Array.isArray(recentLogs) ? recentLogs.map(log => ({
+    id: log.id,
+    food_type: log.food_type,
+    photo_url: log.photo_url,
+    guilt_rating: log.guilt_rating,
+    regret_rating: log.regret_rating,
+    ai_motivation: log.ai_motivation,
+    created_at: log.created_at,
+  })) : [];
+
+  // Handler for messages from WebView
+  const handleWebViewMessage = (event: any) => {
+    try {
+      const data = JSON.parse(event.nativeEvent.data);
+      if (data.type === 'itemTapped' && data.logId) {
+        const tapped = logsForWebView.find(l => l.id === data.logId);
+        if (tapped) setSelectedLog(tapped);
+      }
+    } catch (e) {}
+  };
+
+  // Send logs and junkScore to WebView on load or data change
+  const injectedJS = `window.setJunkData && window.setJunkData(${JSON.stringify({ logs: logsForWebView, junkScore })}); true;`;
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -216,77 +244,6 @@ export default function ProgressScreen() {
             </View>
           ) : (
             <>
-              {/* 3D Reflection Card - now with Three.js scene */}
-              <GLView
-                style={{ width: '100%', height: 380, borderRadius: 36, backgroundColor: '#181a2a', overflow: 'hidden', marginBottom: spacing.lg }}
-                onContextCreate={async (gl) => {
-                  const { drawingBufferWidth: w, drawingBufferHeight: h } = gl;
-                  const renderer = new Renderer({ gl });
-                  renderer.setSize(w, h);
-                  renderer.setClearColor(0x181a2a, 1);
-                  const scene = new THREE.Scene();
-                  scene.fog = new THREE.Fog(0x181a2a, 10, 50);
-                  const camera = new THREE.PerspectiveCamera(75, w / h, 0.1, 1000);
-                  camera.position.z = 5;
-                  const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
-                  scene.add(ambientLight);
-                  const dirLight = new THREE.DirectionalLight(0xffffff, 0.5);
-                  dirLight.position.set(5, 10, 7.5);
-                  scene.add(dirLight);
-                  // --- Avatar Placeholder: Spinning Cube ---
-                  const geometry = new THREE.BoxGeometry(1, 1, 1);
-                  const material = new THREE.MeshStandardMaterial({ color: 0x00c6fb });
-                  const cube = new THREE.Mesh(geometry, material);
-                  scene.add(cube);
-                  // --- Junk Food Items: 3D Spheres as Placeholders ---
-                  const junkMeshes = [];
-                  const logCount = Array.isArray(recentLogs) ? recentLogs.length : 0;
-                  for (let i = 0; i < logCount; i++) {
-                    // Position items in a semi-circle around the avatar
-                    const angle = (Math.PI / (logCount + 1)) * (i + 1) - Math.PI / 2;
-                    const radius = 2.5;
-                    const x = Math.cos(angle) * radius;
-                    const y = -1.2;
-                    const z = Math.sin(angle) * radius;
-                    // Use a different color for each food type (placeholder)
-                    const log = recentLogs[i];
-                    let color = 0xffc300; // default yellow
-                    if (log.food_type.toLowerCase().includes('pizza')) color = 0xffa500;
-                    if (log.food_type.toLowerCase().includes('burger')) color = 0x8d5524;
-                    if (log.food_type.toLowerCase().includes('fries')) color = 0xffe066;
-                    if (log.food_type.toLowerCase().includes('soda')) color = 0x00bfff;
-                    if (log.food_type.toLowerCase().includes('candy')) color = 0xff69b4;
-                    if (log.food_type.toLowerCase().includes('ice cream')) color = 0xfaf0e6;
-                    if (log.food_type.toLowerCase().includes('donut')) color = 0xf7cac9;
-                    if (log.food_type.toLowerCase().includes('cookie')) color = 0xd2b48c;
-                    if (log.food_type.toLowerCase().includes('cake')) color = 0xf5e6ff;
-                    // TODO: Swap for custom 3D models or textures per food type
-                    const sphereGeo = new THREE.SphereGeometry(0.35, 32, 32);
-                    const sphereMat = new THREE.MeshStandardMaterial({ color });
-                    const mesh = new THREE.Mesh(sphereGeo, sphereMat);
-                    mesh.position.set(x, y, z);
-                    scene.add(mesh);
-                    junkMeshes.push(mesh);
-                  }
-                  // --- Animate falling in for new items (simple drop effect) ---
-                  let dropProgress = 0;
-                  const dropDuration = 40; // frames
-                  const animate = () => {
-                    requestAnimationFrame(animate);
-                    cube.rotation.x += 0.01;
-                    cube.rotation.y += 0.01;
-                    // Animate the last junk item dropping in
-                    if (junkMeshes.length > 0 && dropProgress < dropDuration) {
-                      const mesh = junkMeshes[junkMeshes.length - 1];
-                      mesh.position.y = -1.2 + (2.5 * (1 - dropProgress / dropDuration));
-                      dropProgress++;
-                    }
-                    renderer.render(scene, camera);
-                    gl.endFrameEXP();
-                  };
-                  animate();
-                }}
-              />
               {/* Share Progress Button */}
               <TouchableOpacity onPress={handleShare} style={{ alignSelf: 'center', backgroundColor: '#00c6fb', borderRadius: 22, paddingVertical: 10, paddingHorizontal: 28, flexDirection: 'row', alignItems: 'center', marginBottom: spacing.lg, shadowColor: '#00c6fb', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.18, shadowRadius: 8, elevation: 4 }}>
                 <Ionicons name="share-social-outline" size={20} color="#fff" style={{ marginRight: 8 }} />
@@ -298,8 +255,8 @@ export default function ProgressScreen() {
                   <View style={{ backgroundColor: '#23263a', borderRadius: 18, padding: 32, alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 12 }}>
                     <ActivityIndicator size="large" color={colors.accent || '#e74c3c'} />
                     <Text style={{ color: colors.text, fontSize: 18, marginTop: 18, textAlign: 'center' }}>{processingMsg || 'Processing...'}</Text>
-            </View>
-          </View>
+                  </View>
+                </View>
               </Modal>
 
               {/* Summary Cards */}

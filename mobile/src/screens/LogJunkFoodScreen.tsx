@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -208,78 +208,79 @@ export default function LogJunkFoodScreen({ navigation }: LogJunkFoodScreenProps
         showsVerticalScrollIndicator={false}
       >
         <View style={[cardStyle, { marginTop: spacing.lg, backgroundColor: colors.lightGray, marginHorizontal: spacing.lg }]}>
-        <View style={styles.photoSection}>
-          <TouchableOpacity style={styles.photoButton} onPress={showImagePicker}>
-            {photo ? (
-              <Image source={{ uri: photo }} style={styles.photoPreview} />
-            ) : (
-              <View style={styles.photoPlaceholder}>
-                <Ionicons name="camera" size={48} color="#ccc" />
-                <Text style={styles.photoPlaceholderText}>Add Photo</Text>
-              </View>
-            )}
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.formSection}>
-          <View style={styles.inputGroup}>
+          <View style={styles.formSection}>
+            <View style={styles.inputGroup}>
               <Text style={{ color: colors.textSecondary, fontSize: fontSizes.body, marginBottom: spacing.sm }}>What did you eat?</Text>
-            <TextInput
-              style={styles.textInput}
-              value={foodType}
-              onChangeText={setFoodType}
-              placeholder="e.g. Large pizza, candy bar, fast food..."
-              placeholderTextColor="#999"
+              <TextInput
+                style={styles.textInput}
+                value={foodType}
+                onChangeText={setFoodType}
+                placeholder="e.g. Large pizza, candy bar, fast food..."
+                placeholderTextColor="#999"
+              />
+            </View>
+
+            <RatingSlider
+              label="Guilt Level"
+              value={guiltRating}
+              onChange={setGuiltRating}
+              color="#e74c3c"
             />
-          </View>
 
-          <RatingSlider
-            label="Guilt Level"
-            value={guiltRating}
-            onChange={setGuiltRating}
-            color="#e74c3c"
-          />
+            <RatingSlider
+              label="Regret Level"
+              value={regretRating}
+              onChange={setRegretRating}
+              color="#f39c12"
+            />
 
-          <RatingSlider
-            label="Regret Level"
-            value={regretRating}
-            onChange={setRegretRating}
-            color="#f39c12"
-          />
-
-          <View style={styles.inputGroup}>
+            <View style={styles.inputGroup}>
               <Text style={{ color: colors.textSecondary, fontSize: fontSizes.body, marginBottom: spacing.sm }}>Estimated Cost (optional)</Text>
-            <TextInput
-              style={styles.textInput}
-              value={estimatedCost}
-              onChangeText={setEstimatedCost}
-              placeholder="e.g. 15.99"
-              placeholderTextColor="#999"
-              keyboardType="numeric"
-            />
-          </View>
+              <TextInput
+                style={styles.textInput}
+                value={estimatedCost}
+                onChangeText={setEstimatedCost}
+                placeholder="e.g. 15.99"
+                placeholderTextColor="#999"
+                keyboardType="numeric"
+              />
+            </View>
 
-          <View style={styles.inputGroup}>
+            <View style={styles.inputGroup}>
               <Text style={{ color: colors.textSecondary, fontSize: fontSizes.body, marginBottom: spacing.sm }}>Location (optional)</Text>
-            <TextInput
-              style={styles.textInput}
-              value={location}
-              onChangeText={setLocation}
-              placeholder="e.g. McDonald's, Home, Office..."
-              placeholderTextColor="#999"
-            />
-          </View>
-        </View>
+              <TextInput
+                style={styles.textInput}
+                value={location}
+                onChangeText={setLocation}
+                placeholder="e.g. McDonald's, Home, Office..."
+                placeholderTextColor="#999"
+              />
+            </View>
 
-        <TouchableOpacity
+            {/* Photo section */}
+            <View style={styles.photoSection}>
+              <TouchableOpacity style={styles.photoButton} onPress={showImagePicker}>
+                {photo ? (
+                  <Image source={{ uri: photo }} style={styles.photoPreview} />
+                ) : (
+                  <View style={styles.photoPlaceholder}>
+                    <Ionicons name="camera" size={48} color="#ccc" />
+                    <Text style={styles.photoPlaceholderText}>Add Photo (Optional)</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <TouchableOpacity
             style={[buttonStyle, { backgroundColor: colors.accent, marginTop: spacing.md }]}
-          onPress={submitLog}
-          disabled={isSubmitting}
-        >
+            onPress={submitLog}
+            disabled={isSubmitting}
+          >
             <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: fontSizes.body }}>
-              {isSubmitting ? 'Submitting...' : 'Submit'}
+              {isSubmitting ? 'Submitting...' : 'Add to JunkStop'}
             </Text>
-        </TouchableOpacity>
+          </TouchableOpacity>
         </View>
       </ScrollView>
     </View>

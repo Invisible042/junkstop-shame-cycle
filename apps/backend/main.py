@@ -423,7 +423,7 @@ async def get_user_logs(
         return [
             {
                 "id": log["id"],
-                "photo_url": log["photo_url"],
+                "photo_url": log["photo_url"] if log["photo_url"] else None,
                 "food_type": log["food_type"],
                 "guilt_rating": log["guilt_rating"],
                 "regret_rating": log["regret_rating"],
@@ -1020,6 +1020,22 @@ def process_scene_export_job(job_id: int, image_base64: str):
             "UPDATE scene_exports SET status = %s, file_url = %s, updated_at = %s WHERE id = %s",
             ("failed", None, datetime.utcnow(), job_id)
         )
+
+@app.get("/debug/logs")
+async def debug_logs(current_user: dict = Depends(get_current_user)):
+    """Debug endpoint to check logs in database"""
+    try:
+        logs = db_client.execute_query(
+            "SELECT id, photo_url, food_type, guilt_rating, regret_rating FROM junk_food_logs WHERE user_id = %s ORDER BY created_at DESC LIMIT 5",
+            (current_user["id"],)
+        )
+        return {
+            "user_id": current_user["id"],
+            "logs_count": len(logs),
+            "logs": logs
+        }
+    except Exception as e:
+        return {"error": str(e)}
 
 if __name__ == "__main__":
     print("Starting JunkStop FastAPI backend server...")

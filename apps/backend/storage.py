@@ -17,10 +17,14 @@ def ensure_upload_dir():
     if not os.path.exists(UPLOAD_DIR):
         os.makedirs(UPLOAD_DIR)
 
-async def upload_image(file: UploadFile, user_id: int) -> str:
+async def upload_image(file: Optional[UploadFile], user_id: int) -> Optional[str]:
     print("working here 2")
     """Upload and process image file"""
     ensure_upload_dir()
+    
+    # Handle case when no file is provided
+    if not file:
+        return None
     
     # Validate file
     if not file.filename:

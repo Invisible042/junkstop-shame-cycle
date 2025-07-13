@@ -14,6 +14,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { apiRequest } from '../utils/api';
 import { colors, spacing, fontSizes, cardStyle, buttonStyle } from '../styles/theme';
 import { Video, ResizeMode } from 'expo-av';
+import { JunkFood3DScene } from '../components/JunkFood3DScene';
 
 interface UserProfile {
   id: number;
@@ -27,11 +28,23 @@ interface UserProfile {
   created_at: string;
 }
 
+interface JunkFoodItem {
+  id: string;
+  name: string;
+  category: string;
+  shameRating: number;
+  guiltRating: number;
+  timestamp: Date;
+  notes?: string;
+  photo?: string;
+}
+
 export default function DashboardScreen({ navigation }: { navigation: any }) {
   const { user } = useAuth();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [dailyInsight, setDailyInsight] = useState<string>('');
+  const [foodItems, setFoodItems] = useState<JunkFoodItem[]>([]);
 
   const fetchProfile = async () => {
     try {
@@ -49,6 +62,39 @@ export default function DashboardScreen({ navigation }: { navigation: any }) {
     } catch (error) {
       console.error('Failed to fetch insight:', error);
     }
+  };
+
+  const loadFoodItems = async () => {
+    try {
+      console.log('Loading food items...');
+      const logs = await apiRequest('/api/logs?limit=1000');
+      console.log('Logs received:', logs);
+      
+      const convertedItems: JunkFoodItem[] = logs.map((log: any) => ({
+        id: log.id.toString(),
+        name: log.food_type,
+        category: 'Junk Food',
+        shameRating: log.guilt_rating,
+        guiltRating: log.regret_rating,
+        timestamp: new Date(log.created_at),
+        notes: log.location,
+        photo: log.photo_url
+      }));
+      
+      console.log('Converted items:', convertedItems);
+      setFoodItems(convertedItems);
+    } catch (error) {
+      console.log('Could not load food items:', error);
+      setFoodItems([]);
+    }
+  };
+
+  const handleFoodItemClick = (food: JunkFoodItem) => {
+    Alert.alert(
+      food.name,
+      `Shame: ${food.shameRating}/10\nGuilt: ${food.guiltRating}/10\n\n${food.notes || 'No notes'}`,
+      [{ text: 'OK' }]
+    );
   };
 
   const incrementStreak = async () => {
@@ -69,13 +115,14 @@ export default function DashboardScreen({ navigation }: { navigation: any }) {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([fetchProfile(), fetchDailyInsight()]);
+    await Promise.all([fetchProfile(), fetchDailyInsight(), loadFoodItems()]);
     setRefreshing(false);
   };
 
   useEffect(() => {
     fetchProfile();
     fetchDailyInsight();
+    loadFoodItems();
   }, []);
 
   const getMotivationalMessage = (streakCount: number) => {
@@ -95,51 +142,80 @@ export default function DashboardScreen({ navigation }: { navigation: any }) {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
-      <View style={{ ...styles.header, backgroundColor: colors.background }}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-        <View style={styles.welcomeSection}>
-          <Text style={styles.welcomeText}>Welcome back,</Text>
-          <Text style={styles.usernameText}>{user?.username || 'User'}!</Text>
-        </View>
-          <TouchableOpacity onPress={() => navigation.navigate('Settings')} style={{ marginLeft: 12 }}>
-            <Ionicons name="settings-outline" size={26} color={colors.accent} />
+      <ScrollView 
+        style={{ flex: 1 }}
+        contentContainerStyle={{ paddingBottom: spacing.xl }}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
+        <View style={{ ...styles.header, backgroundColor: colors.background }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <View style={styles.welcomeSection}>
+              <Text style={styles.welcomeText}>Welcome back,</Text>
+              <Text style={styles.usernameText}>{user?.username || 'User'}!</Text>
+            </View>
+            <TouchableOpacity onPress={() => navigation.navigate('Settings')} style={{ marginLeft: 12 }}>
+              <Ionicons name="settings-outline" size={26} color={colors.accent} />
+            </TouchableOpacity>
+          </View>
+
+          {/* 3D Junk Food Collection - Best UX placement */}
+          <View style={{ marginTop: spacing.md, marginBottom: spacing.md }}>
+            <Text style={{ 
+              color: colors.text, 
+              fontSize: fontSizes.heading, 
+              fontWeight: 'bold', 
+              marginBottom: spacing.sm,
+              textAlign: 'center'
+            }}>
+              Your Junk Food Collection
+            </Text>
+            <JunkFood3DScene 
+              foodItems={foodItems}
+              onFoodItemClick={handleFoodItemClick}
+            />
+          </View>
+
+          {/* AI Insights Card */}
+          <View style={[cardStyle, { marginTop: spacing.xs, marginBottom: spacing.sm, backgroundColor: colors.lightGray, borderColor: colors.border, borderWidth: 1, alignItems: 'center', padding: spacing.md }]}> 
+            <Text style={{ color: colors.green, fontWeight: 'bold', marginBottom: spacing.xs, fontSize: fontSizes.body }}>
+              <Ionicons name="sparkles-outline" size={16} color={colors.green} /> AI Insight
+            </Text>
+            <Text style={{ color: colors.textSecondary, fontSize: fontSizes.small, marginBottom: spacing.xs, fontStyle: 'italic' }}>
+              Personalized for you
+            </Text>
+            <Text style={{ color: colors.text, fontSize: fontSizes.body, textAlign: 'center', marginTop: spacing.xs }}>
+              {dailyInsight ? truncateTokens(dailyInsight, 40) : 'No insight available today.'}
+            </Text>
+          </View>
+
+          <View style={[cardStyle, { alignItems: 'center', marginTop: spacing.sm, marginBottom: spacing.sm, padding: spacing.md, backgroundColor: colors.lightGray }]}> 
+            <Text style={{ color: colors.textSecondary, fontSize: fontSizes.small, marginBottom: spacing.xs }}>Days Clean</Text>
+            <Text style={{ color: colors.text, fontSize: 40, fontWeight: 'bold', marginBottom: spacing.xs }}>{profile?.streak_count || 0}</Text>
+          </View>
+
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.sm }}>
+            <View style={[cardStyle, { flex: 1, marginRight: spacing.xs, alignItems: 'center', padding: spacing.sm, backgroundColor: colors.lightGray }]}> 
+              <Text style={{ color: colors.green, fontSize: 24, fontWeight: 'bold' }}>${profile?.total_saved?.toFixed(0) || '0'}</Text>
+              <Text style={{ color: colors.textSecondary, fontSize: fontSizes.small }}>Money Saved</Text>
+            </View>
+            <View style={[cardStyle, { flex: 1, marginLeft: spacing.xs, alignItems: 'center', padding: spacing.sm, backgroundColor: colors.lightGray }]}> 
+              <Text style={{ color: colors.text, fontSize: 24, fontWeight: 'bold' }}>{profile?.avg_guilt_score?.toFixed(1) || '0'}</Text>
+              <Text style={{ color: colors.textSecondary, fontSize: fontSizes.small }}>Avg Guilt Score</Text>
+            </View>
+          </View>
+
+          <TouchableOpacity
+            style={[buttonStyle, { backgroundColor: colors.accent, marginTop: spacing.sm, marginBottom: spacing.sm }]}
+            onPress={() => navigation.navigate('LogJunkFood')}
+          >
+            <Ionicons name="camera" size={18} color="#fff" style={{ marginRight: 6 }} />
+            <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: fontSizes.body }}>Log Junk Food</Text>
           </TouchableOpacity>
         </View>
-        {/* AI Insights Card */}
-        <View style={[cardStyle, { marginTop: spacing.xs, marginBottom: spacing.sm, backgroundColor: colors.lightGray, borderColor: colors.border, borderWidth: 1, alignItems: 'center', padding: spacing.md }]}> 
-          <Text style={{ color: colors.green, fontWeight: 'bold', marginBottom: spacing.xs, fontSize: fontSizes.body }}>
-            <Ionicons name="sparkles-outline" size={16} color={colors.green} /> AI Insight
-          </Text>
-          <Text style={{ color: colors.textSecondary, fontSize: fontSizes.small, marginBottom: spacing.xs, fontStyle: 'italic' }}>
-            Personalized for you
-          </Text>
-          <Text style={{ color: colors.text, fontSize: fontSizes.body, textAlign: 'center', marginTop: spacing.xs }}>
-            {dailyInsight ? truncateTokens(dailyInsight, 40) : 'No insight available today.'}
-          </Text>
-        </View>
-        {/* End AI Insights Card */}
-        <View style={[cardStyle, { alignItems: 'center', marginTop: spacing.sm, marginBottom: spacing.sm, padding: spacing.md, backgroundColor: colors.lightGray }]}> 
-          <Text style={{ color: colors.textSecondary, fontSize: fontSizes.small, marginBottom: spacing.xs }}>Days Clean</Text>
-          <Text style={{ color: colors.text, fontSize: 40, fontWeight: 'bold', marginBottom: spacing.xs }}>{profile?.streak_count || 0}</Text>
-        </View>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.sm }}>
-          <View style={[cardStyle, { flex: 1, marginRight: spacing.xs, alignItems: 'center', padding: spacing.sm, backgroundColor: colors.lightGray }]}> 
-            <Text style={{ color: colors.green, fontSize: 24, fontWeight: 'bold' }}>${profile?.total_saved?.toFixed(0) || '0'}</Text>
-            <Text style={{ color: colors.textSecondary, fontSize: fontSizes.small }}>Money Saved</Text>
-        </View>
-          <View style={[cardStyle, { flex: 1, marginLeft: spacing.xs, alignItems: 'center', padding: spacing.sm, backgroundColor: colors.lightGray }]}> 
-            <Text style={{ color: colors.text, fontSize: 24, fontWeight: 'bold' }}>{profile?.avg_guilt_score?.toFixed(1) || '0'}</Text>
-            <Text style={{ color: colors.textSecondary, fontSize: fontSizes.small }}>Avg Guilt Score</Text>
-          </View>
-        </View>
-        <TouchableOpacity
-          style={[buttonStyle, { backgroundColor: colors.accent, marginTop: spacing.sm, marginBottom: spacing.sm }]}
-          onPress={() => navigation.navigate('LogJunkFood')}
-        >
-          <Ionicons name="camera" size={18} color="#fff" style={{ marginRight: 6 }} />
-          <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: fontSizes.body }}>Log Junk Food</Text>
-        </TouchableOpacity>
-      </View>
+      </ScrollView>
     </View>
   );
 }
