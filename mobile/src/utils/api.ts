@@ -1,7 +1,7 @@
 import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
 
-export const API_BASE_URL = 'http://10.142.73.154:5000';
+export const API_BASE_URL = 'http://10.146.95.154:5000';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -16,13 +16,13 @@ api.interceptors.request.use(
       config.headers = {
         ...config.headers,
         Authorization: `Bearer ${token}`,
-      };
+      } as any;
     }
 
     // ✅ Only set 'Content-Type' to JSON if it's not a FormData
     const isFormData = config.data instanceof FormData;
     if (config.data && typeof config.data === 'object' && !isFormData) {
-      config.headers['Content-Type'] = 'application/json';
+      (config.headers as any)['Content-Type'] = 'application/json';
     }
 
     return config;
@@ -71,9 +71,7 @@ export const uploadFile = async (url: string, formData: FormData) => {
     const response = await axios.post(`${API_BASE_URL}${url}`, formData, {
       headers: {
         ...(token && { Authorization: `Bearer ${token}` }),
-        'Content-Type':'multipart/form-data'
-        // ⚠️ DO NOT set 'Content-Type' manually — let Axios handle it
-      },
+      } as any,
     });
 
     return response.data;

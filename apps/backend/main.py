@@ -22,6 +22,9 @@ from postgres_client import db_client
 from auth import get_current_user, create_access_token, verify_password, get_password_hash
 from storage import upload_image, delete_image
 from ai_coach import generate_motivation, analyze_patterns, estimate_calories
+from database import get_supabase_client
+from gamification import GamificationService
+from collections import Counter
 
 load_dotenv()
 
@@ -204,6 +207,43 @@ def boomerang_video(input_path, output_path):
     # Cleanup
     os.remove(reversed_path)
     os.remove(concat_list)
+
+def calculate_level(xp):
+    level = 1
+    xp_needed = 100
+    while xp >= xp_needed:
+        level += 1
+        xp_needed = int(xp_needed * 1.2)
+    return level
+
+async def check_and_unlock_achievements(user_id, event_type=None):
+    supabase = get_supabase_client()
+    # Fetch user stats
+    user = supabase.table("users").select("*",).eq("id", user_id).single().execute().data
+    logs = supabase.table("junk_food_logs").select("*").eq("user_id", user_id).execute().data
+    achievements = supabase.table("achievements").select("*").execute().data
+    user_achievements = supabase.table("user_achievements").select("*").eq("user_id", user_id).execute().data
+    unlocked_ids = {ua["achievement_id"] for ua in user_achievements}
+    newly_unlocked = []
+    # Example logic: unlock based on log count
+    for ach in achievements:
+        if ach["id"] in unlocked_ids:
+            continue
+        if ach["badge_type"] == "milestone" and ach.get("max_progress") and len(logs) >= ach["max_progress"]:
+            # Unlock achievement
+            supabase.table("user_achievements").insert({
+                "user_id": user_id,
+                "achievement_id": ach["id"],
+                "unlocked_at": datetime.utcnow().isoformat(),
+                "progress": ach["max_progress"]
+            }).execute()
+            # Add XP
+            new_xp = (user["xp"] if user else 0) + ach["xp_reward"]
+            new_level = calculate_level(new_xp)
+            supabase.table("users").update({"xp": new_xp, "level": new_level}).eq("id", user_id).execute()
+            newly_unlocked.append(ach["id"])
+        # Add more logic for streaks, social, etc. as needed
+    return newly_unlocked
 
 # Root endpoint
 @app.get("/")
@@ -393,6 +433,18 @@ async def create_log(
         motivation = await generate_motivation(current_user["id"], guilt_rating, regret_rating)
         print(motivation)
         
+        # After log creation, check for achievements
+        await check_and_unlock_achievements(current_user["id"], event_type="log")
+
+        # After log creation, process gamification event
+        gamification.process_event(current_user["id"], "log", event_data={
+            "food_type": food_type,
+            "guilt_rating": guilt_rating,
+            "regret_rating": regret_rating,
+            "estimated_cost": estimated_cost,
+            "location": location
+        })
+
         return {
             "id": log["id"],
             "photo_url": log["photo_url"],
@@ -1036,6 +1088,217 @@ async def debug_logs(current_user: dict = Depends(get_current_user)):
         }
     except Exception as e:
         return {"error": str(e)}
+
+@app.get("/api/achievements")
+async def get_user_achievements(current_user: dict = Depends(get_current_user)):
+    return gamification.get_user_achievements(current_user["id"])
+
+@app.post("/api/achievements/unlock")
+async def unlock_achievement(achievement_id: int = Body(...), current_user: dict = Depends(get_current_user)):
+    # Manually unlock an achievement (admin or special case)
+    achievements = gamification.get_achievements()
+    ach = next((a for a in achievements if a["id"] == achievement_id), None)
+    if not ach:
+        return {"message": "Achievement not found"}
+    gamification._unlock_achievement(current_user["id"], ach)
+    return {"message": "Achievement unlocked"}
+
+@app.post("/api/achievements/progress")
+async def update_achievement_progress(achievement_id: int = Body(...), progress: int = Body(...), current_user: dict = Depends(get_current_user)):
+    # Update progress for a specific achievement
+    user_achievements = gamification.get_user_achievements(current_user["id"])
+    existing = next((ua for ua in user_achievements if ua["achievement_id"] == achievement_id), None)
+    if existing:
+        gamification.supabase.table("user_achievements").update({"progress": progress}).eq("user_id", current_user["id"]).eq("achievement_id", achievement_id).execute()
+    else:
+        gamification.supabase.table("user_achievements").insert({
+            "user_id": current_user["id"],
+            "achievement_id": achievement_id,
+            "progress": progress
+        }).execute()
+    return {"message": "Progress updated"}
+
+@app.get("/api/user/xp")
+async def get_user_xp(current_user: dict = Depends(get_current_user)):
+    user = gamification.supabase.table("users").select("xp", "level").eq("id", current_user["id"]).single().execute().data
+    return user
+
+@app.post("/api/user/xp/add")
+async def add_xp(amount: int = Body(...), current_user: dict = Depends(get_current_user)):
+    gamification.award_xp(current_user["id"], amount, reason="manual add")
+    user = gamification.supabase.table("users").select("xp", "level").eq("id", current_user["id"]).single().execute().data
+    return user
+
+@app.post("/api/community/feature-feedback")
+async def submit_feature_feedback(request: FeatureFeedbackRequest, current_user: dict = Depends(get_current_user)):
+    for feature_id in request.features:
+        db_client.execute_insert(
+            """
+            INSERT INTO community_feature_feedback (user_id, feature_id, created_at)
+            VALUES (%s, %s, %s)
+            """,
+            (current_user["id"], feature_id, datetime.utcnow())
+        )
+    return {"success": True}
+
+@app.get("/api/community/feature-feedback-stats")
+async def get_feature_feedback_stats():
+    # Get all feedback
+    feedback = db_client.execute_query("SELECT feature_id, user_id FROM community_feature_feedback")
+    if not feedback:
+        return {}
+    # Count unique users per feature
+    feature_user = {}
+    for row in feedback:
+        feature_user.setdefault(row["feature_id"], set()).add(row["user_id"])
+    # Total unique users who gave feedback
+    all_users = set(row["user_id"] for row in feedback)
+    total_users = len(all_users)
+    # Calculate percent for each feature
+    stats = {}
+    for feature_id, users in feature_user.items():
+        stats[feature_id] = round(100 * len(users) / total_users, 1) if total_users else 0
+    return stats
+
+# Test endpoints for gamification testing
+@app.post("/api/test/gamification/simulate-streak")
+async def simulate_streak(days: int = Body(...), current_user: dict = Depends(get_current_user)):
+    """Simulate a streak of days for testing achievements"""
+    try:
+        user_id = current_user['id']
+        
+        # Update user's streak in the database
+        query = """
+        UPDATE users 
+        SET current_streak = $1, best_streak = GREATEST(best_streak, $1)
+        WHERE id = $2
+        """
+        await db_client.execute(query, days, user_id)
+        
+        # Trigger achievement check
+        gamification_service = GamificationService()
+        await gamification_service.check_and_unlock_achievements(user_id, "streak")
+        
+        return {
+            "message": f"Simulated {days} day streak",
+            "current_streak": days,
+            "best_streak": days
+        }
+    except Exception as e:
+        print(f"Error simulating streak: {e}")
+        raise HTTPException(status_code=500, detail="Failed to simulate streak")
+
+@app.post("/api/test/gamification/simulate-logs")
+async def simulate_logs(count: int = Body(...), current_user: dict = Depends(get_current_user)):
+    """Simulate logging junk food items for testing achievements"""
+    try:
+        user_id = current_user['id']
+        
+        # Update user's total logs in the database
+        query = """
+        UPDATE users 
+        SET total_logs = $1
+        WHERE id = $2
+        """
+        await db_client.execute(query, count, user_id)
+        
+        # Trigger achievement check
+        gamification_service = GamificationService()
+        await gamification_service.check_and_unlock_achievements(user_id, "milestone")
+        
+        return {
+            "message": f"Simulated {count} total logs",
+            "total_logs": count
+        }
+    except Exception as e:
+        print(f"Error simulating logs: {e}")
+        raise HTTPException(status_code=500, detail="Failed to simulate logs")
+
+@app.post("/api/test/gamification/add-xp")
+async def add_test_xp(amount: int = Body(...), current_user: dict = Depends(get_current_user)):
+    """Add XP directly for testing level progression"""
+    try:
+        user_id = current_user['id']
+        
+        # Get current XP and add the amount
+        query = "SELECT total_xp FROM users WHERE id = $1"
+        result = await db_client.fetch_one(query, user_id)
+        current_xp = result['total_xp'] if result else 0
+        new_xp = current_xp + amount
+        
+        # Update user's XP
+        update_query = "UPDATE users SET total_xp = $1 WHERE id = $2"
+        await db_client.execute(update_query, new_xp, user_id)
+        
+        return {
+            "message": f"Added {amount} XP",
+            "previous_xp": current_xp,
+            "new_xp": new_xp
+        }
+    except Exception as e:
+        print(f"Error adding XP: {e}")
+        raise HTTPException(status_code=500, detail="Failed to add XP")
+
+@app.post("/api/test/gamification/unlock-achievement")
+async def unlock_test_achievement(achievement_id: str = Body(...), current_user: dict = Depends(get_current_user)):
+    """Manually unlock an achievement for testing"""
+    try:
+        user_id = current_user['id']
+        
+        # Check if achievement exists and is not already unlocked
+        query = """
+        SELECT * FROM user_achievements 
+        WHERE user_id = $1 AND achievement_id = $2
+        """
+        result = await db_client.fetch_one(query, user_id, achievement_id)
+        
+        if result:
+            return {"message": "Achievement already unlocked"}
+        
+        # Unlock the achievement
+        insert_query = """
+        INSERT INTO user_achievements (user_id, achievement_id, unlocked_at)
+        VALUES ($1, $2, NOW())
+        """
+        await db_client.execute(insert_query, user_id, achievement_id)
+        
+        return {
+            "message": f"Unlocked achievement: {achievement_id}",
+            "achievement_id": achievement_id
+        }
+    except Exception as e:
+        print(f"Error unlocking achievement: {e}")
+        raise HTTPException(status_code=500, detail="Failed to unlock achievement")
+
+@app.get("/api/test/gamification/reset-user")
+async def reset_test_user(current_user: dict = Depends(get_current_user)):
+    """Reset user's gamification data for testing"""
+    try:
+        user_id = current_user['id']
+        
+        # Reset all gamification data
+        reset_query = """
+        UPDATE users 
+        SET 
+            current_streak = 0,
+            best_streak = 0,
+            total_logs = 0,
+            total_xp = 0
+        WHERE id = $1
+        """
+        await db_client.execute(reset_query, user_id)
+        
+        # Delete all achievements
+        delete_achievements_query = "DELETE FROM user_achievements WHERE user_id = $1"
+        await db_client.execute(delete_achievements_query, user_id)
+        
+        return {
+            "message": "Reset user gamification data",
+            "user_id": user_id
+        }
+    except Exception as e:
+        print(f"Error resetting user: {e}")
+        raise HTTPException(status_code=500, detail="Failed to reset user")
 
 if __name__ == "__main__":
     print("Starting JunkStop FastAPI backend server...")

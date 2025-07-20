@@ -1,28 +1,26 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
-  Dimensions,
   RefreshControl,
   ActivityIndicator,
-  Image,
   TouchableOpacity,
-  Modal,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import api, { API_BASE_URL } from '../utils/api';
+import api from '../utils/api';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { colors, spacing, fontSizes, cardStyle, buttonStyle } from '../styles/theme';
-import StreakBadge from '../components/StreakBadge';
-import { useNavigation } from '@react-navigation/native';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { RootStackParamList } from './VideoPreviewScreen'; // Update path if you move the type
-import * as FileSystem from 'expo-file-system';
-
-const { width } = Dimensions.get('window');
+import MoodBar from '../components/MoodBar';
+import JunkCard from '../components/JunkCard';
+import CoachFeedback from '../components/CoachFeedback';
+import { useTheme } from '../contexts/ThemeContext';
+import LevelProgress from '../components/LevelProgress';
+import GamificationService from '../services/GamificationService';
+import AchievementBadge from '../components/AchievementBadge';
+import { getAchievementById } from '../data/achievements';
+import { isDemoMode, getDemoData } from '../utils/demoData';
+import { textStyles } from '../styles/fonts';
 
 interface WeeklyAnalytics {
   total_logs: number;
@@ -57,395 +55,451 @@ interface JunkFoodLog {
 
 export default function ProgressScreen() {
   const queryClient = useQueryClient();
-  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const { theme } = useTheme();
+  const [refreshing, setRefreshing] = useState(false);
+  const [selectedTab, setSelectedTab] = useState<'analytics' | 'logs'>('analytics');
+  const [levelInfo, setLevelInfo] = useState({ level: 1, currentXP: 0, xpToNextLevel: 100, totalXP: 0 });
+  const gamificationService = GamificationService.getInstance();
 
+  // Function to get next badge progress information
+  const getNextBadgeProgress = () => {
+    const lockedAchievements = gamificationService.getLockedAchievements();
+    const userStats = gamificationService.getUserStats();
+    
+    // Find the next achievable badge for each category
+    const nextBadges = {
+      streak: lockedAchievements.find(a => a.type === 'streak'),
+      milestone: lockedAchievements.find(a => a.type === 'milestone'),
+      social: lockedAchievements.find(a => a.type === 'social'),
+    };
+
+    const progressInfo = [];
+    
+    // Streak progress
+    if (nextBadges.streak && nextBadges.streak.maxProgress !== undefined) {
+      const needed = nextBadges.streak.maxProgress - userStats.currentStreak;
+      if (needed > 0) {
+        progressInfo.push({
+          type: 'streak',
+          achievement: nextBadges.streak,
+          needed,
+          current: userStats.currentStreak,
+          message: `Stay clean for ${needed} more day${needed > 1 ? 's' : ''} to earn '${nextBadges.streak.title}'!`
+        });
+      }
+    }
+
+    // Milestone progress (logs)
+    if (nextBadges.milestone && nextBadges.milestone.id === 'first_log') {
+      const needed = 1 - userStats.totalLogs;
+      if (needed > 0) {
+        progressInfo.push({
+          type: 'milestone',
+          achievement: nextBadges.milestone,
+          needed,
+          current: userStats.totalLogs,
+          message: `Log ${needed} more time${needed > 1 ? 's' : ''} to earn '${nextBadges.milestone.title}'!`
+        });
+      }
+    } else if (nextBadges.milestone && nextBadges.milestone.id === 'ten_logs') {
+      const needed = 10 - userStats.totalLogs;
+      if (needed > 0) {
+        progressInfo.push({
+          type: 'milestone',
+          achievement: nextBadges.milestone,
+          needed,
+          current: userStats.totalLogs,
+          message: `Log ${needed} more time${needed > 1 ? 's' : ''} to earn '${nextBadges.milestone.title}'!`
+        });
+      }
+    }
+
+    return progressInfo;
+  };
+
+  // Enhanced data fetching with better error handling
   const {
     data: analytics,
     isLoading: analyticsLoading,
-    refetch: refetchAnalytics,
+    error: analyticsError,
   } = useQuery({
     queryKey: ['weeklyAnalytics'],
-    queryFn: () => api.get('/api/analytics/weekly').then(res => res.data),
+    queryFn: () => {
+      if (isDemoMode()) {
+        return Promise.resolve({ data: getDemoData('analytics') });
+      }
+      return api.get('/api/analytics/weekly').then(res => res.data);
+    },
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    retry: 3,
   });
 
   const {
-    data: recentLogs,
+    data: recentLogsRaw,
     isLoading: logsLoading,
-    refetch: refetchLogs,
+    error: logsError,
   } = useQuery({
     queryKey: ['recentLogs'],
-    queryFn: () => api.get('/api/logs?limit=1000'), // fetch all logs
+    queryFn: () => {
+      if (isDemoMode()) {
+        return Promise.resolve({ data: getDemoData('logs') });
+      }
+      return api.get('/api/logs?limit=1000');
+    },
+    staleTime: 2 * 60 * 1000, // 2 minutes
+    retry: 3,
   });
 
-  const [refreshing, setRefreshing] = useState(false);
-  const [processing, setProcessing] = useState(false);
-  const [processingMsg, setProcessingMsg] = useState('');
-  const [selectedLog, setSelectedLog] = useState<JunkFoodLog | null>(null);
-  const [webViewKey, setWebViewKey] = useState(0); // for force reload
+  // Enhanced data safety
+  const recentLogs = Array.isArray(recentLogsRaw?.data) ? recentLogsRaw.data : [];
+  const hasLogs = recentLogs && recentLogs.length > 0;
 
-  // Calculate junk score (example: avg guilt * total logs)
-  const junkScore = analytics && analytics.total_logs ? Math.round((analytics.avg_guilt_score || 0) * analytics.total_logs) : 0;
-
-  // Prepare logs for WebView
-  const logsForWebView = Array.isArray(recentLogs) ? recentLogs.map(log => ({
-    id: log.id,
-    food_type: log.food_type,
-    photo_url: log.photo_url,
-    guilt_rating: log.guilt_rating,
-    regret_rating: log.regret_rating,
-    ai_motivation: log.ai_motivation,
-    created_at: log.created_at,
-  })) : [];
-
-  // Handler for messages from WebView
-  const handleWebViewMessage = (event: any) => {
-    try {
-      const data = JSON.parse(event.nativeEvent.data);
-      if (data.type === 'itemTapped' && data.logId) {
-        const tapped = logsForWebView.find(l => l.id === data.logId);
-        if (tapped) setSelectedLog(tapped);
-      }
-    } catch (e) {}
-  };
-
-  // Send logs and junkScore to WebView on load or data change
-  const injectedJS = `window.setJunkData && window.setJunkData(${JSON.stringify({ logs: logsForWebView, junkScore })}); true;`;
-
+  // Enhanced refresh function with better error handling
   const onRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ['weeklyAnalytics'] }),
-      queryClient.invalidateQueries({ queryKey: ['recentLogs'] }),
-    ]);
-    setRefreshing(false);
-  };
-
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { 
-      month: 'short', 
-      day: 'numeric' 
-    });
-  };
-
-  // Add a helper to format date+time
-  const formatDateTime = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleString('en-US', {
-      month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true
-    });
-  };
-
-  const getProgressColor = (value: number, max: number) => {
-    const percentage = (value / max) * 100;
-    if (percentage < 30) return '#4caf50';
-    if (percentage < 70) return '#ff9800';
-    return '#f44336';
-  };
-
-  const handleShare = async () => {
     try {
-      setProcessing(true);
-      setProcessingMsg('Creating your viral video...');
-      // Calculate weekly log count
-      const weekLogCount = analytics?.daily_breakdown?.reduce((sum, d) => sum + d.count, 0) || 0;
-      const avatarVideoFilename = 'video1.mp4'; // Simplified for now, as getAvatarVideoFilename is removed
-      // Call backend to create video share job
-      const res = await api.post('/api/video-share', {
-        input_data: {
-          avatar_video_path: avatarVideoFilename, // just 'video1.mp4'
-        },
-      });
-      const jobId = res.data.id;
-      let status = 'pending';
-      let videoUrl = null;
-      setProcessingMsg('Composing your video...');
-      // Poll for job status
-      while (status === 'pending') {
-        await new Promise(r => setTimeout(r, 2000));
-        const jobRes = await api.get(`/api/video-share/${jobId}/status`);
-        status = jobRes.data.status;
-        if (status === 'complete') {
-          videoUrl = jobRes.data.video_url;
-          break;
-        }
-        if (status === 'failed') {
-          setProcessing(false);
-          alert('Video creation failed: ' + (jobRes.data.error_message || 'Unknown error'));
-          return;
-        }
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['weeklyAnalytics'] }),
+        queryClient.invalidateQueries({ queryKey: ['recentLogs'] }),
+      ]);
+      
+      // Update gamification service with real data
+      if (analytics && recentLogs.length > 0) {
+        const userStats = {
+          totalLogs: recentLogs.length,
+          currentStreak: analytics.streak_count,
+          bestStreak: analytics.best_streak,
+          totalSaved: analytics.total_cost,
+          totalCaloriesAvoided: analytics.total_calories,
+          averageGuiltScore: analytics.avg_guilt_score,
+          joinDate: new Date(),
+        };
+        
+        // Update the gamification service with real data
+        gamificationService.updateStats(userStats);
       }
-      setProcessingMsg('Preparing to share...');
-      // Download video to local file (required for Sharing.shareAsync)
-      console.log('Video URL to download:', videoUrl);
-      if (!videoUrl) {
-        setProcessing(false);
-        alert('No video URL returned from server.');
-        return;
-      }
-      // If the URL is relative, prepend your backend base URL
-      if (!videoUrl.startsWith('http')) {
-        videoUrl = API_BASE_URL.replace(/\/$/, '') + videoUrl;
-      }
-      const localUri = FileSystem.cacheDirectory + 'viral_share.mp4';
-      await FileSystem.downloadAsync(videoUrl, localUri);
-      setProcessing(false);
-      navigation.navigate('VideoPreview', { localUri });
-    } catch (e) {
-      setProcessing(false);
-      alert('Error sharing video: ' + (e.message || e));
+      
+      // Update level info
+      const totalXP = gamificationService.getTotalXP();
+      const levelData = gamificationService.calculateLevel(totalXP);
+      setLevelInfo(levelData);
+    } catch (error) {
+      console.error('Refresh failed:', error);
+    } finally {
+      setRefreshing(false);
     }
   };
 
-  // Add this mapping function near the top of the component
-  const foodTypeToEmoji = (foodType: string) => {
-    const type = foodType.toLowerCase();
-    if (type.includes('pizza')) return '🍕';
-    if (type.includes('burger') || type.includes('cheeseburger')) return '🍔';
-    if (type.includes('fries') || type.includes('chips')) return '🍟';
-    if (type.includes('soda') || type.includes('cola') || type.includes('coke') || type.includes('pepsi')) return '🥤';
-    if (type.includes('candy') || type.includes('bar') || type.includes('chocolate')) return '🍫';
-    if (type.includes('ice cream') || type.includes('sundae')) return '🍦';
-    if (type.includes('donut') || type.includes('doughnut')) return '🍩';
-    if (type.includes('cookie')) return '🍪';
-    if (type.includes('cake')) return '🍰';
-    if (type.includes('popcorn')) return '🍿';
-    if (type.includes('hot dog')) return '🌭';
-    if (type.includes('taco')) return '🌮';
-    if (type.includes('sandwich')) return '🥪';
-    if (type.includes('milkshake')) return '🥤';
-    return '🧁'; // default junk food emoji
-  };
-
-  // When using recentLogs, always default to an array
-  const safeRecentLogs = Array.isArray(recentLogs) ? recentLogs : [];
-
-  return (
-    <View style={{ flex: 1, backgroundColor: colors.background }}>
-      {/* Fixed Current Streak Badge and Motivational Subtitle */}
-      <View style={{ paddingTop: spacing.xl, paddingBottom: spacing.md, backgroundColor: 'transparent', alignItems: 'center' }}>
-        <StreakBadge streak={analytics?.streak_count || 0} />
-        <Text style={{ color: colors.textSecondary, fontSize: fontSizes.body, marginTop: spacing.xs, marginBottom: spacing.sm, textAlign: 'center' }}>
-          {analytics?.streak_count > 0 ? 'Keep it up! Every day counts.' : 'Start your streak today!'}
+  // Loading state
+  if (analyticsLoading || logsLoading) {
+    return (
+      <View style={[styles.loadingContainer, { backgroundColor: theme.background }]}>
+        <ActivityIndicator size="large" color={theme.accent} />
+        <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
+          Loading your progress...
         </Text>
       </View>
-      {(analyticsLoading || logsLoading) && (
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.lg }}>
-          <ActivityIndicator size="large" color={colors.accent || '#e74c3c'} />
-            </View>
-      )}
-      {!(analyticsLoading || logsLoading) && (
-        <ScrollView contentContainerStyle={{ padding: spacing.lg, paddingTop: 0 }}>
-          {(!analytics || !recentLogs) ? (
-            <View style={{ alignItems: 'center', marginTop: spacing.xl }}>
-              <Text style={{ color: colors.textSecondary, fontSize: fontSizes.body, textAlign: 'center' }}>
-                No progress data available yet. Log some junk food to see your stats!
-              </Text>
-            </View>
-          ) : (
-            <>
-              {/* Share Progress Button */}
-              <TouchableOpacity onPress={handleShare} style={{ alignSelf: 'center', backgroundColor: '#00c6fb', borderRadius: 22, paddingVertical: 10, paddingHorizontal: 28, flexDirection: 'row', alignItems: 'center', marginBottom: spacing.lg, shadowColor: '#00c6fb', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.18, shadowRadius: 8, elevation: 4 }}>
-                <Ionicons name="share-social-outline" size={20} color="#fff" style={{ marginRight: 8 }} />
-                <Text style={{ fontSize: 16, color: '#fff', fontWeight: 'bold' }}>Share Progress</Text>
-              </TouchableOpacity>
-              {/* Processing Modal */}
-              <Modal visible={processing} transparent animationType="fade">
-                <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', alignItems: 'center' }}>
-                  <View style={{ backgroundColor: '#23263a', borderRadius: 18, padding: 32, alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 12 }}>
-                    <ActivityIndicator size="large" color={colors.accent || '#e74c3c'} />
-                    <Text style={{ color: colors.text, fontSize: 18, marginTop: 18, textAlign: 'center' }}>{processingMsg || 'Processing...'}</Text>
-                  </View>
-                </View>
-              </Modal>
+    );
+  }
 
-              {/* Summary Cards */}
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginBottom: spacing.lg }}>
-                <View style={[cardStyle, { width: '48%', marginBottom: spacing.md, alignItems: 'center', backgroundColor: colors.lightGray }]}> 
-                  <Ionicons name="flame" size={24} color="#ffd700" style={{ marginBottom: 4 }} />
-                  <Text style={{ color: '#ffd700', fontWeight: 'bold', fontSize: 24 }}>{analytics.best_streak || 0}</Text>
-                  <Text style={{ color: '#fff', fontSize: 12 }}>Best Streak</Text>
-              </View>
-                <View style={[cardStyle, { width: '48%', marginBottom: spacing.md, alignItems: 'center', backgroundColor: colors.lightGray }]}> 
-                  <Ionicons name="cash" size={24} color="#27ae60" style={{ marginBottom: 4 }} />
-                  <Text style={{ color: '#27ae60', fontWeight: 'bold', fontSize: 24 }}>${analytics.total_cost?.toFixed(0) || 0}</Text>
-                  <Text style={{ color: '#fff', fontSize: 12 }}>Money Saved</Text>
-            </View>
-                <View style={[cardStyle, { width: '48%', marginBottom: spacing.md, alignItems: 'center', backgroundColor: colors.lightGray }]}> 
-                  <Ionicons name="journal" size={24} color="#2196f3" style={{ marginBottom: 4 }} />
-                  <Text style={{ color: '#2196f3', fontWeight: 'bold', fontSize: 24 }}>{analytics.total_logs || 0}</Text>
-                  <Text style={{ color: '#fff', fontSize: 12 }}>Total Logs</Text>
+  // Error state
+  if (analyticsError || logsError) {
+    return (
+      <View style={[styles.errorContainer, { backgroundColor: theme.background }]}>
+        <Ionicons name="alert-circle-outline" size={64} color={theme.accent} />
+        <Text style={[styles.errorTitle, { color: theme.text }]}>Oops! Something went wrong</Text>
+        <Text style={[styles.errorText, { color: theme.textSecondary }]}>
+          We couldn't load your progress data. Please try again.
+        </Text>
+        <TouchableOpacity
+          style={[styles.retryButton, { backgroundColor: theme.accent }]}
+          onPress={onRefresh}
+        >
+          <Text style={styles.retryButtonText}>Try Again</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  return (
+    <View style={[styles.container, { backgroundColor: theme.background }]}>
+      {/* Enhanced Header */}
+      <View style={[styles.header, { backgroundColor: theme.background, paddingTop: 20 }]}>
+        <View style={styles.headerContent}>
+          <View style={styles.headerIconContainer}>
+            <Ionicons name="trending-up" size={32} color={theme.accent} />
           </View>
-                <View style={[cardStyle, { width: '48%', marginBottom: spacing.md, alignItems: 'center', backgroundColor: colors.lightGray }]}> 
-                  <Ionicons name="bar-chart" size={24} color="#ff9800" style={{ marginBottom: 4 }} />
-                  <Text style={{ color: '#ff9800', fontWeight: 'bold', fontSize: 24 }}>{analytics.avg_guilt_score?.toFixed(1) || 0}</Text>
-                  <Text style={{ color: '#fff', fontSize: 12 }}>Avg Guilt</Text>
-                </View>
-                <View style={[cardStyle, { width: '48%', marginBottom: spacing.md, alignItems: 'center', backgroundColor: colors.lightGray }]}> 
-                  <Ionicons name="heart" size={24} color="#9b59b6" style={{ marginBottom: 4 }} />
-                  <Text style={{ color: '#9b59b6', fontWeight: 'bold', fontSize: 24 }}>{analytics.avg_regret_score?.toFixed(1) || 0}</Text>
-                  <Text style={{ color: '#fff', fontSize: 12 }}>Avg Regret</Text>
-              </View>
-                <View style={[cardStyle, { width: '48%', marginBottom: spacing.md, alignItems: 'center', backgroundColor: colors.lightGray }]}> 
-                  <Ionicons name="nutrition" size={24} color="#00b894" style={{ marginBottom: 4 }} />
-                  <Text style={{ color: '#00b894', fontWeight: 'bold', fontSize: 24 }}>{analytics.total_calories || 0}</Text>
-                  <Text style={{ color: '#fff', fontSize: 12 }}>Total Calories</Text>
-                </View>
-              </View>
+          <View style={styles.headerTextContainer}>
+            <Text style={[styles.headerTitle, { color: theme.text }]}>PROGRESS</Text>
+            <Text style={[styles.headerSubtitle, { color: theme.textSecondary }]}>
+              Track Your Growth
+            </Text>
+          </View>
+        </View>
+      </View>
 
-              {/* Simple Bar Chart for Daily Breakdown */}
-              <LinearGradient
-                colors={["#23263a", "#3a3ad6", "#7b2ff2"]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={{
-                  borderRadius: 28,
-                  marginBottom: spacing.lg,
-                  minHeight: 200,
-                  padding: spacing.lg,
-                  shadowColor: '#000',
-                  shadowOffset: { width: 0, height: 6 },
-                  shadowOpacity: 0.22,
-                  shadowRadius: 16,
-                  elevation: 8,
-                  borderWidth: 1,
-                  borderColor: 'rgba(255,255,255,0.08)',
-                  overflow: 'hidden',
-                }}
-              >
-                <View style={{
-                  ...StyleSheet.absoluteFillObject,
-                  backgroundColor: 'rgba(30,32,60,0.55)',
-                  borderRadius: 28,
-                  zIndex: 0,
-                }} />
-                <Text style={{
-                  color: '#fff',
-                  fontWeight: 'bold',
-                  fontSize: 22,
-                  marginBottom: 2,
-                  textAlign: 'center',
-                  letterSpacing: 0.5,
-                  textShadowColor: '#000',
-                  textShadowOffset: { width: 0, height: 1 },
-                  textShadowRadius: 4,
-                  zIndex: 1,
-                }}>
-                  This Week
-                </Text>
-                <Text style={{
-                  color: '#00c6fb',
-                  fontSize: 13,
-                  textAlign: 'center',
-                  marginBottom: 10,
-                  fontStyle: 'italic',
-                  opacity: 0.85,
-                  zIndex: 1,
-                }}>
-                  Keep up the momentum!
-                </Text>
-                {/* Summary Row */}
-                <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: 10, zIndex: 1 }}>
-                  <Ionicons name="calendar" size={16} color="#fff" style={{ marginRight: 6 }} />
-                  <Text style={{ color: '#fff', fontSize: 13, marginRight: 12 }}>Total logs: {analytics.total_logs || 0}</Text>
-                  <Ionicons name="star" size={15} color="#ffd700" style={{ marginRight: 4 }} />
-                  <Text style={{ color: '#ffd700', fontSize: 13 }}>
-                    Best day: {analytics.daily_breakdown && analytics.daily_breakdown.length > 0 ? Math.max(...analytics.daily_breakdown.map(d => d.count)) : 0} logs
+      {/* Enhanced Tab Navigation */}
+      <View style={[styles.tabContainer, { backgroundColor: theme.cardBg }]}>
+        <TouchableOpacity
+          onPress={() => setSelectedTab('analytics')}
+          style={[
+            styles.tabButton,
+            selectedTab === 'analytics' && { backgroundColor: theme.accent }
+          ]}
+        >
+          <Ionicons 
+            name="bar-chart-outline" 
+            size={20} 
+            color={selectedTab === 'analytics' ? '#fff' : theme.textSecondary} 
+          />
+          <Text style={[
+            styles.tabText,
+            { color: selectedTab === 'analytics' ? '#fff' : theme.text }
+          ]}>
+            Analytics
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => setSelectedTab('logs')}
+          style={[
+            styles.tabButton,
+            selectedTab === 'logs' && { backgroundColor: theme.accent }
+          ]}
+        >
+          <Ionicons 
+            name="time-outline" 
+            size={20} 
+            color={selectedTab === 'logs' ? '#fff' : theme.textSecondary} 
+          />
+          <Text style={[
+            styles.tabText,
+            { color: selectedTab === 'logs' ? '#fff' : theme.text }
+          ]}>
+            Recent Logs
+          </Text>
+        </TouchableOpacity>
+
+      </View>
+
+      <ScrollView 
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+        showsVerticalScrollIndicator={false}
+      >
+        {selectedTab === 'analytics' && (
+          <>
+            {/* Level Progress with Next Achievement */}
+            <LevelProgress
+              level={levelInfo.level}
+              currentXP={levelInfo.currentXP}
+              xpToNextLevel={levelInfo.xpToNextLevel}
+              nextAchievement={(() => {
+                const nextBadgeProgress = getNextBadgeProgress();
+                if (nextBadgeProgress.length > 0) {
+                  const progress = nextBadgeProgress[0];
+                  return {
+                    title: progress.achievement.title,
+                    icon: progress.achievement.icon,
+                    message: progress.message,
+                    current: progress.current,
+                    max: progress.achievement.maxProgress!,
+                  };
+                }
+                return undefined;
+              })()}
+            />
+            
+            {/* Enhanced MoodBar Section */}
+            <View style={[styles.moodBarContainer, { backgroundColor: theme.cardBg }]}>
+              <View style={styles.logsHeader}>
+                <Ionicons name="analytics-outline" size={24} color={theme.accent} />
+                <Text style={[styles.logsTitle, { color: theme.text }]}>Weekly Progress</Text>
+              </View>
+              <MoodBar logs={recentLogs} theme={theme} />
+              
+              {/* Enhanced 30-day grid */}
+              <View style={styles.gridContainer}>
+                <Text style={[styles.gridTitle, { color: theme.text }]}>Last 30 Days</Text>
+                <View style={styles.grid}>
+                  {(() => {
+                    const days = [];
+                    const today = new Date();
+                    for (let i = 29; i >= 0; i--) {
+                      const d = new Date(today);
+                      d.setDate(today.getDate() - i);
+                      const dateStr = d.toISOString().slice(0, 10);
+                      const logged = recentLogs.some(log => 
+                        log.created_at && log.created_at.slice(0, 10) === dateStr
+                      );
+                      days.push(
+                        <View 
+                          key={dateStr} 
+                          style={[
+                            styles.gridDay,
+                            { 
+                              backgroundColor: logged ? theme.accent : theme.inputBg,
+                              borderColor: logged ? theme.accent : theme.inputBorder
+                            }
+                          ]}
+                        >
+                          {logged ? (
+                            <Ionicons name="checkmark" size={16} color="#fff" />
+                          ) : (
+                            <Ionicons name="close" size={14} color={theme.textSecondary} />
+                          )}
+                        </View>
+                      );
+                    }
+                    return days;
+                  })()}
+                </View>
+              </View>
+            </View>
+
+            {/* Enhanced Summary Card */}
+            {analytics && (
+              <View style={[styles.summaryCard, { backgroundColor: theme.cardBg }]}>
+                <View style={styles.summaryHeader}>
+                  <Ionicons name="stats-chart-outline" size={24} color={theme.accent} />
+                  <Text style={[styles.summaryTitle, { color: theme.text }]}>
+                    This Week's Summary
                   </Text>
                 </View>
-                <View style={{ flexDirection: 'row', alignItems: 'flex-end', height: 100, minHeight: 100, maxHeight: 100, paddingHorizontal: 2, zIndex: 1 }}>
-                  {analytics.daily_breakdown?.map((day, idx) => {
-                    const max = Math.max(...analytics.daily_breakdown.map(d => d.count));
-                    const barHeight = max ? Math.min((day.count / max) * 80, 80) : 0;
-                    const barColor = '#00c6fb';
-                    // Get weekday abbreviation
-                    const dateObj = new Date(day.date);
-                    const weekday = dateObj.toLocaleDateString('en-US', { weekday: 'short' });
+                
+                <View style={styles.summaryGrid}>
+                  <View style={[styles.summaryItem, { backgroundColor: theme.accent + '10' }]}>
+                    <Ionicons name="restaurant-outline" size={20} color={theme.accent} />
+                    <Text style={[styles.summaryValue, { color: theme.text }]}>{analytics.total_logs}</Text>
+                    <Text style={[styles.summaryLabel, { color: theme.textSecondary }]}>Total Logs</Text>
+                  </View>
+                  <View style={[styles.summaryItem, { backgroundColor: theme.accent + '10' }]}>
+                    <Ionicons name="flame-outline" size={20} color={theme.accent} />
+                    <Text style={[styles.summaryValue, { color: theme.text }]}>{analytics.total_calories}</Text>
+                    <Text style={[styles.summaryLabel, { color: theme.textSecondary }]}>Calories</Text>
+                  </View>
+                  <View style={[styles.summaryItem, { backgroundColor: theme.accent + '10' }]}>
+                    <Ionicons name="heart-outline" size={20} color={theme.accent} />
+                    <Text style={[styles.summaryValue, { color: theme.text }]}>
+                      {analytics.avg_regret_score?.toFixed(1)}
+                    </Text>
+                    <Text style={[styles.summaryLabel, { color: theme.textSecondary }]}>Avg Regret</Text>
+                  </View>
+                  <View style={[styles.summaryItem, { backgroundColor: theme.accent + '10' }]}>
+                    <Ionicons name="trophy-outline" size={20} color={theme.accent} />
+                    <Text style={[styles.summaryValue, { color: theme.text }]}>{analytics.best_streak}</Text>
+                    <Text style={[styles.summaryLabel, { color: theme.textSecondary }]}>Best Streak</Text>
+                  </View>
+                </View>
+
+                {/* Enhanced Most Common Food */}
+                {recentLogs.length > 0 && (() => {
+                  const normalize = (str: string) => str.toLowerCase().replace(/[^a-z0-9]/g, '').replace(/s$/, '');
+                  const freq: Record<string, { count: number; original: string }> = {};
+                  recentLogs.forEach(log => {
+                    if (log.food_type) {
+                      const key = normalize(log.food_type);
+                      freq[key] = (freq[key] || { count: 0, original: log.food_type });
+                      freq[key].count = (freq[key].count || 0) + 1;
+                      freq[key].original = log.food_type;
+                    }
+                  });
+                  const values = Object.values(freq);
+                  let mostCommon: { count: number; original: string } | null = null;
+                  for (const val of values) {
+                    if (!mostCommon || val.count > mostCommon.count) mostCommon = val;
+                  }
+                  return mostCommon && mostCommon.count > 1 ? (
+                    <View style={styles.mostCommonContainer}>
+                      <Text style={[styles.mostCommonLabel, { color: theme.textSecondary }]}>
+                        Most Common Food:
+                      </Text>
+                      <Text style={[styles.mostCommonValue, { color: theme.text }]}>
+                        {mostCommon.original} ({mostCommon.count}x)
+                      </Text>
+                    </View>
+                  ) : null;
+                })()}
+              </View>
+            )}
+            
+            {/* Achievements Section */}
+            <View style={[styles.achievementsContainer, { backgroundColor: theme.cardBg }]}>
+              <View style={styles.logsHeader}>
+                <Ionicons name="trophy-outline" size={24} color={theme.accent} />
+                <Text style={[styles.logsTitle, { color: theme.text }]}>Your Achievements</Text>
+              </View>
+              
+              <View style={styles.achievementsGrid}>
+                {gamificationService.getUnlockedAchievements().slice(0, 6).map((achievement) => (
+                  <AchievementBadge
+                    key={achievement.id}
+                    achievement={achievement}
+                    size="small"
+                    showProgress={false}
+                  />
+                ))}
+              </View>
+            </View>
+          </>
+        )}
+
+        {selectedTab === 'logs' && (
+          <>
+            {/* Enhanced Recent Logs Section */}
+            <View style={[styles.achievementsContainer, { backgroundColor: theme.cardBg }]}>
+              <View style={styles.logsHeader}>
+                <Ionicons name="time-outline" size={24} color={theme.accent} />
+                <Text style={[styles.logsTitle, { color: theme.text }]}>Recent Logs</Text>
+              </View>
+              
+                            {hasLogs ? (
+                <View style={styles.logsContainer}>
+                  {recentLogs.map((item) => {
+                    // Handle both demo data (timestamp) and real data (created_at)
+                    const timestamp = item.timestamp || item.created_at;
+                    const dateObj = timestamp instanceof Date ? timestamp : new Date(timestamp);
+                    
+                    // Check if date is valid
+                    const isValidDate = !isNaN(dateObj.getTime());
+                    const date = isValidDate ? dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'Today';
+                    const time = isValidDate ? dateObj.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }) : 'Now';
+                    
                     return (
-                      <View key={idx} style={{ flex: 1, alignItems: 'center', justifyContent: 'flex-end' }}>
-                        <View style={{
-                          height: barHeight,
-                          width: 18,
-                          backgroundColor: barColor,
-                          borderTopLeftRadius: 12,
-                          borderTopRightRadius: 12,
-                          marginBottom: 4,
-                          shadowColor: barColor,
-                          shadowOffset: { width: 0, height: 2 },
-                          shadowOpacity: 0.45,
-                          shadowRadius: 8,
-                          elevation: 5,
-                        }} />
-                        <Text style={{ fontSize: 12, color: barColor, fontWeight: 'bold', marginTop: 2 }}>{weekday}</Text>
+                      <View key={item.id} style={[styles.logCard, { backgroundColor: theme.cardBg }]}>
+                        <JunkCard 
+                          log={{
+                            ...item,
+                            name: item.food_type || item.name,
+                            regretRating: item.regret_rating || item.shameRating,
+                            guilt_rating: item.guilt_rating || item.guiltRating,
+                            date,
+                            time,
+                            estimated_calories: item.estimated_calories || 0,
+                            ai_motivation: item.ai_motivation || item.notes,
+                            photo_url: item.photo_url || item.photo,
+                          }} 
+                          theme={theme} 
+                        />
                       </View>
                     );
                   })}
                 </View>
-              </LinearGradient>
-
-              {/* Recent Logs */}
-              <View style={{
-                backgroundColor: colors.lightGray,
-                borderRadius: 24,
-                marginBottom: spacing.lg,
-                padding: spacing.md,
-                borderWidth: 1,
-                borderColor: 'rgba(255,255,255,0.08)',
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 6 },
-                shadowOpacity: 0.14,
-                shadowRadius: 14,
-                elevation: 7,
-                overflow: 'hidden',
-              }}>
-                <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 20, marginBottom: 12, textAlign: 'center', letterSpacing: 0.5, textShadowColor: '#000', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 }}>Recent Logs</Text>
-                {safeRecentLogs.length === 0 ? (
-                  <View style={{ alignItems: 'center', padding: spacing.lg }}>
-                    <Ionicons name="cloud-outline" size={48} color="#00c6fb" style={{ marginBottom: 8 }} />
-                    <Text style={{ color: '#fff', fontSize: 16, fontWeight: 'bold', marginBottom: 4 }}>No logs yet.</Text>
-                    <Text style={{ color: '#b2f7ef', fontSize: 13, fontStyle: 'italic', textAlign: 'center' }}>Start logging to see your journey take shape!</Text>
-                  </View>
-                ) : (
-                  safeRecentLogs.map((log, idx) => (
-                    <View key={log.id || idx} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: idx === safeRecentLogs.length - 1 ? 0 : 18 }}>
-                      {log.photo_url ? (
-                        <View style={{
-                          width: 52,
-                          height: 52,
-                          borderRadius: 16,
-                          borderWidth: 2,
-                          borderColor: '#00c6fb',
-                          backgroundColor: '#222',
-                          marginRight: 16,
-                          overflow: 'hidden',
-                        }}>
-                          <Image source={{ uri: log.photo_url }} style={{ width: '100%', height: '100%', borderRadius: 13 }} />
-                        </View>
-                      ) : (
-                        <View style={{ width: 52, height: 52, borderRadius: 16, backgroundColor: colors.lightGray, marginRight: 16, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#444' }}>
-                          <Ionicons name="fast-food-outline" size={28} color="#666" />
-                        </View>
-                      )}
-                      <View style={{ flex: 1 }}>
-                        <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 18, marginBottom: 2, letterSpacing: 0.2 }}>{log.food_type}</Text>
-                        <Text style={{ color: '#b2f7ef', fontSize: 13, fontWeight: '600', marginBottom: 2 }}>{formatDateTime(log.created_at)}</Text>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
-                          <Text style={{ color: '#fff', fontSize: 13, marginRight: 10 }}>Guilt: {log.guilt_rating}</Text>
-                          <Text style={{ color: '#fff', fontSize: 13, marginRight: 10 }}>Regret: {log.regret_rating}</Text>
-                          <Text style={{ color: '#fff', fontSize: 13 }}>${log.estimated_cost?.toFixed(2) || 0}</Text>
-                        </View>
-                        {log.ai_motivation && (
-                          <Text style={{ color: '#ffd700', fontSize: 12, fontStyle: 'italic', marginTop: 2 }}>{log.ai_motivation}</Text>
-                        )}
-                      </View>
-                    </View>
-                  )).reduce((acc, el, idx, arr) => acc.concat(el, idx < arr.length - 1 ? <View key={'divider-' + idx} style={{ height: 1, backgroundColor: 'rgba(255,255,255,0.08)', marginVertical: 8, borderRadius: 1 }} /> : null), [])
-                )}
-              </View>
-            </>
+              ) : (
+                <View style={styles.emptyState}>
+                  <Ionicons name="restaurant-outline" size={64} color={theme.textSecondary} />
+                  <Text style={[styles.emptyTitle, { color: theme.text }]}>No logs yet!</Text>
+                  <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
+                    Start by logging your first junk food to see your progress here.
+                  </Text>
+                </View>
               )}
-        </ScrollView>
-      )}
+            </View>
+          </>
+        )}
+      </ScrollView>
     </View>
   );
 }
@@ -453,327 +507,254 @@ export default function ProgressScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+  },
+  errorTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  errorText: {
+    fontSize: 16,
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  retryButton: {
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
   header: {
-    padding: 30,
-    paddingTop: 60,
-    borderBottomLeftRadius: 30,
-    borderBottomRightRadius: 30,
+    paddingTop: 56,
+    paddingBottom: 20,
+    paddingHorizontal: 20,
+    zIndex: 2,
+  },
+  headerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  headerIconContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  headerTextContainer: {
+    flex: 1,
   },
   headerTitle: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 5,
+    fontFamily: textStyles.h1.fontFamily,
+    fontSize: 32, // Much larger text
+    fontWeight: '900', // Extra bold
+    letterSpacing: 1,
+    lineHeight: 36,
+    marginBottom: 8,
+    color: '#1F2937', // Dark text for better visibility
+    textShadowColor: 'rgba(255, 255, 255, 1)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
   },
   headerSubtitle: {
-    fontSize: 16,
-    color: '#fff',
-    opacity: 0.8,
+    fontFamily: textStyles.h3.fontFamily,
+    fontSize: 18, // Much larger subtitle
+    fontWeight: '600', // Semi-bold
+    letterSpacing: 0.5,
+    lineHeight: 22,
+    opacity: 1, // Full opacity
+    color: '#4B5563', // Darker, more visible color
+    textShadowColor: 'rgba(255, 255, 255, 0.8)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
-  summaryCards: {
+  tabContainer: {
+    flexDirection: 'row',
+    alignSelf: 'center',
+    marginTop: 12,
+    marginBottom: 16,
+    borderRadius: 24,
+    padding: 4,
+    width: '90%',
+    justifyContent: 'center',
+  },
+  tabButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: 20,
+    marginHorizontal: 2,
+  },
+  tabText: {
+    fontWeight: '700',
+    fontSize: 16,
+    marginLeft: 8,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 32,
+  },
+  moodBarContainer: {
+    borderRadius: 18,
+    marginBottom: 24,
+    padding: 20,
+    alignSelf: 'center',
+    width: '100%',
+  },
+  gridContainer: {
+    marginTop: 16,
+    alignItems: 'center',
+  },
+  gridTitle: {
+    fontWeight: '600',
+    fontSize: 15,
+    marginBottom: 12,
+  },
+  grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    padding: 20,
-    paddingTop: 30,
+    justifyContent: 'center',
+    maxWidth: 320,
+  },
+  gridDay: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    margin: 2,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   summaryCard: {
-    backgroundColor: '#fff',
-    borderRadius: 15,
+    borderRadius: 18,
+    marginBottom: 24,
     padding: 20,
-    margin: 5,
-    width: '45%',
-    alignItems: 'center',
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    alignSelf: 'center',
+    width: '100%',
   },
-  summaryNumber: {
-    fontSize: 24,
+  achievementsContainer: {
+    marginBottom: 24,
+    borderRadius: 18,
+    padding: 20,
+    alignSelf: 'center',
+    width: '100%',
+  },
+  achievementsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    paddingHorizontal: 4,
+  },
+  summaryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  summaryTitle: {
     fontWeight: 'bold',
-    color: '#333',
-    marginTop: 8,
+    fontSize: 18,
+    marginLeft: 8,
+  },
+  summaryGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  summaryItem: {
+    width: '48%',
+    marginBottom: 12,
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
   },
   summaryLabel: {
     fontSize: 12,
-    color: '#666',
     marginTop: 4,
     textAlign: 'center',
   },
-  sectionTitle: {
+  summaryValue: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 15,
   },
-  chartSection: {
-    backgroundColor: '#fff',
-    margin: 20,
-    padding: 20,
-    borderRadius: 15,
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+  mostCommonContainer: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.1)',
   },
-  chart: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'flex-end',
-    height: 120,
+  mostCommonLabel: {
+    fontSize: 14,
+    marginBottom: 4,
   },
-  chartBar: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  barContainer: {
-    height: 80,
-    justifyContent: 'flex-end',
-    alignItems: 'center',
-    marginBottom: 5,
-  },
-  bar: {
-    width: 20,
-    borderRadius: 10,
-  },
-  barLabel: {
-    fontSize: 10,
-    color: '#666',
-    textAlign: 'center',
-  },
-  barValue: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    color: '#333',
-    marginTop: 2,
-  },
-  trendsSection: {
-    backgroundColor: '#fff',
-    margin: 20,
-    padding: 20,
-    borderRadius: 15,
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-  },
-  trendCard: {
-    marginBottom: 20,
-  },
-  trendHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  trendTitle: {
+  mostCommonValue: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#333',
+  },
+  logsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+    marginLeft: 4,
+  },
+  logsTitle: {
+    fontWeight: '900',
+    fontSize: 20,
+    letterSpacing: 0.7,
     marginLeft: 8,
   },
-  trendBar: {
-    height: 8,
-    backgroundColor: '#e0e0e0',
-    borderRadius: 4,
-    overflow: 'hidden',
-  },
-  trendProgress: {
-    height: '100%',
-    borderRadius: 4,
-  },
-  trendValue: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#333',
-    marginTop: 5,
-    textAlign: 'right',
-  },
-  recentSection: {
-    margin: 20,
+  logsContainer: {
+    marginBottom: 16,
   },
   logCard: {
-    backgroundColor: '#fff',
-    borderRadius: 15,
-    padding: 15,
-    marginBottom: 10,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
+    borderRadius: 18,
+    marginBottom: 16,
   },
-  logHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  emptyState: {
     alignItems: 'center',
-    marginBottom: 10,
+    marginTop: 48,
+    paddingHorizontal: 32,
   },
-  logFood: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    flex: 1,
-  },
-  logDate: {
-    fontSize: 12,
-    color: '#666',
-  },
-  logStats: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-  },
-  logStat: {
-    alignItems: 'center',
-  },
-  logStatLabel: {
-    fontSize: 12,
-    color: '#666',
-  },
-  logStatValue: {
-    fontSize: 14,
+  emptyTitle: {
+    fontSize: 20,
     fontWeight: 'bold',
-    marginTop: 2,
+    marginTop: 16,
+    marginBottom: 8,
   },
-  logLocation: {
-    fontSize: 12,
-    color: '#666',
-    marginTop: 8,
-    fontStyle: 'italic',
-  },
-  streakScrollContainer: {
-    paddingHorizontal: spacing.lg,
-    alignItems: 'center',
-  },
-  streakStage: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginHorizontal: spacing.sm,
-  },
-  streakCard: {
-    width: 200,
-    height: 260,
-    borderRadius: 16,
-    overflow: 'hidden',
-    position: 'relative',
-    backgroundColor: '#fff',
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-  },
-  streakCardLocked: {
-    opacity: 0.3,
-  },
-  streakImage: {
-    width: '100%',
-    height: 185,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-  },
-  streakImageBlurred: {
-    opacity: 0.05,
-  },
-  lockOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-  },
-  streakCardContent: {
-    padding: spacing.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flex: 1,
-    minHeight: 75,
-  },
-  streakLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    textAlign: 'center',
-    marginBottom: 4,
-    color: 'rgba(51, 51, 51, 0.8)',
-  },
-  streakLabelLocked: {
-    color: 'rgba(153, 153, 153, 0.6)',
-  },
-  streakLabelUnlocked: {
-    color: 'rgba(51, 51, 51, 0.8)',
-  },
-  streakTitle: {
+  emptyText: {
     fontSize: 16,
-    fontWeight: 'bold',
     textAlign: 'center',
-    color: 'rgba(51, 51, 51, 0.9)',
+    lineHeight: 24,
   },
-  streakTitleLocked: {
-    color: 'rgba(153, 153, 153, 0.7)',
-  },
-  streakTitleUnlocked: {
-    color: 'rgba(51, 51, 51, 0.9)',
-  },
-  arrowContainer: {
-    marginHorizontal: spacing.xs,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  streakMotivation: {
-    fontSize: 11,
-    textAlign: 'center',
-    marginTop: 4,
-    lineHeight: 14,
-    paddingHorizontal: 4,
-  },
-  streakMotivationUnlocked: {
-    color: '#166534',
-    fontWeight: '600',
-  },
-  streakMotivationLocked: {
-    color: '#999',
-    fontStyle: 'italic',
-  },
-  progressIndicator: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: spacing.md,
-    gap: 8,
-  },
-  progressDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  progressDotActive: {
-    backgroundColor: colors.accent,
-  },
-  progressDotInactive: {
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
-  },
-  leftArrowHint: {
-    position: 'absolute',
-    left: spacing.sm,
-    top: '50%',
-    transform: [{ translateY: -10 }],
-    zIndex: 1,
-  },
-  lockMessage: {
-    color: '#fff',
-    fontSize: 10,
-    fontWeight: '600',
-    textAlign: 'center',
+  coachContainer: {
+    borderRadius: 18,
     marginTop: 8,
-    paddingHorizontal: 8,
   },
+
 });

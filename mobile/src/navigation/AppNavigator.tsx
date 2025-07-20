@@ -47,10 +47,10 @@ export default function AppNavigator() {
         ) : (
           <>
             <Stack.Screen name="Welcome" options={{ headerShown: false }}>
-              {props => <WelcomeScreen {...props} />}
+              {props => <WelcomeScreen onNext={() => props.navigation.navigate('FeatureHighlight')} {...props} />}
             </Stack.Screen>
             <Stack.Screen name="FeatureHighlight" options={{ headerShown: false }}>
-              {props => <FeatureHighlightScreen {...props} />}
+              {props => <FeatureHighlightScreen onNext={() => props.navigation.navigate('FinishOnboarding')} {...props} />}
             </Stack.Screen>
             <Stack.Screen name="FinishOnboarding" options={{ headerShown: false }}>
               {props => <FinishOnboardingScreen onFinish={() => setOnboardingComplete(true)} {...props} />}

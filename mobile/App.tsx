@@ -5,9 +5,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { AuthProvider } from './src/contexts/AuthContext';
+import { ThemeProvider, useTheme } from './src/contexts/ThemeContext';
 import AppNavigator from './src/navigation/AppNavigator';
 import * as Notifications from 'expo-notifications';
 import { useEffect } from 'react';
+import { LinearGradient } from 'expo-linear-gradient';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -17,6 +19,21 @@ const queryClient = new QueryClient({
     },
   },
 });
+
+function ThemedApp() {
+  const { theme } = useTheme();
+  return (
+    <LinearGradient
+      colors={theme.backgroundGradient}
+      style={{ flex: 1 }}
+    >
+      <NavigationContainer>
+        <AppNavigator />
+        <StatusBar style="auto" />
+      </NavigationContainer>
+    </LinearGradient>
+  );
+}
 
 export default function App() {
   useEffect(() => {
@@ -49,10 +66,9 @@ export default function App() {
       <SafeAreaProvider>
         <QueryClientProvider client={queryClient}>
           <AuthProvider>
-            <NavigationContainer>
-              <StatusBar style="light" backgroundColor="#1a1a2e" />
-              <AppNavigator />
-            </NavigationContainer>
+            <ThemeProvider>
+              <ThemedApp />
+            </ThemeProvider>
           </AuthProvider>
         </QueryClientProvider>
       </SafeAreaProvider>

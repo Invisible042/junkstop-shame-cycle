@@ -68,6 +68,10 @@ class CommunityPostCreate(BaseModel):
     photo_url: Optional[str] = None
     is_anonymous: bool = True
 
+# Feature feedback model
+class FeatureFeedbackRequest(BaseModel):
+    features: List[str]
+
 class CommunityPostResponse(BaseModel):
     id: int
     content: str

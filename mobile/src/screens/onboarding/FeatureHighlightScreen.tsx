@@ -1,48 +1,113 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, spacing, fontSizes, buttonStyle } from '../../styles/theme';
+import { useTheme } from '../../contexts/ThemeContext';
 
-const features = [
-  {
-    icon: 'flame-outline',
-    color: colors.yellow,
-    title: 'Streaks',
-    desc: 'Stay motivated by building your clean days streak and unlocking badges.'
-  },
-  {
-    icon: 'sparkles-outline',
-    color: colors.green,
-    title: 'AI Insights',
-    desc: 'Get daily, personalized insights to help you break the cycle.'
-  },
-  {
-    icon: 'chatbubbles-outline',
-    color: colors.blue,
-    title: 'Community',
-    desc: 'Share progress, get support, and celebrate wins together.'
-  }
-];
+const { width } = Dimensions.get('window');
 
-export default function FeatureHighlightScreen({ navigation }: { navigation: any }) {
+interface FeatureHighlightScreenProps {
+  onNext: () => void;
+}
+
+export default function FeatureHighlightScreen({ onNext }: FeatureHighlightScreenProps) {
+  const { theme } = useTheme();
+
+  const features = [
+    {
+      icon: 'camera',
+      title: 'Photo Accountability',
+      description: 'Take photos of your food to stay accountable and track your progress visually',
+      color: '#4CAF50'
+    },
+    {
+      icon: 'chatbubble-ellipses',
+      title: 'AI Coach',
+      description: 'Get personalized insights and motivation from our AI-powered coach',
+      color: '#2196F3'
+    },
+    {
+      icon: 'analytics',
+      title: 'Smart Analytics',
+      description: 'Track patterns, guilt levels, and progress with detailed insights',
+      color: '#FF9800'
+    },
+    {
+      icon: 'people',
+      title: 'Community Support',
+      description: 'Coming soon! Connect with others on the same journey',
+      color: '#9C27B0'
+    },
+    {
+      icon: 'shield-checkmark',
+      title: 'Privacy First',
+      description: 'Your data stays private and secure. Share only what you want',
+      color: '#E91E63'
+    },
+    {
+      icon: 'trophy',
+      title: 'Achievement System',
+      description: 'Earn badges and celebrate milestones on your journey',
+      color: '#FFC107'
+    }
+  ];
+
   return (
-    <View style={styles.container}>
-      <Text style={styles.headline}>What makes JunkStop special?</Text>
-      {features.map((f, i) => (
-        <View key={i} style={styles.featureRow}>
-          <Ionicons name={f.icon as any} size={32} color={f.color} style={{ marginRight: spacing.md }} />
-          <View style={{ flex: 1 }}>
-            <Text style={styles.featureTitle}>{f.title}</Text>
-            <Text style={styles.featureDesc}>{f.desc}</Text>
+    <View style={[styles.container, { backgroundColor: '#fff' }]}>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        {/* Header */}
+        <View style={styles.header}>
+          <Text style={[styles.title, { color: theme.text }]}>Why Choose JunkStop?</Text>
+          <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
+            Everything you need to break free from junk food addiction
+          </Text>
+        </View>
+
+        {/* Features Grid */}
+        <View style={styles.featuresContainer}>
+          {features.map((feature, index) => (
+            <View key={index} style={[styles.featureCard, { backgroundColor: theme.cardBg }]}>
+              <View style={[styles.featureIcon, { backgroundColor: feature.color + '15' }]}>
+                <Ionicons name={feature.icon as any} size={28} color={feature.color} />
+              </View>
+              <Text style={[styles.featureTitle, { color: theme.text }]}>{feature.title}</Text>
+              <Text style={[styles.featureDescription, { color: theme.textSecondary }]}>
+                {feature.description}
+              </Text>
+            </View>
+          ))}
+        </View>
+
+        {/* Stats Section */}
+        <View style={[styles.statsContainer, { backgroundColor: theme.cardBg }]}>
+          <Text style={[styles.statsTitle, { color: theme.text }]}>Join Our Community</Text>
+          <View style={styles.statsGrid}>
+            <View style={styles.statItem}>
+              <Text style={[styles.statNumber, { color: theme.accent }]}>10K+</Text>
+              <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Active Users</Text>
+            </View>
+            <View style={styles.statItem}>
+              <Text style={[styles.statNumber, { color: theme.accent }]}>85%</Text>
+              <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Success Rate</Text>
+            </View>
+            <View style={styles.statItem}>
+              <Text style={[styles.statNumber, { color: theme.accent }]}>4.8★</Text>
+              <Text style={[styles.statLabel, { color: theme.textSecondary }]}>User Rating</Text>
+            </View>
           </View>
         </View>
-      ))}
-      <TouchableOpacity
-        style={[buttonStyle, { backgroundColor: colors.accent, marginTop: spacing.lg }]}
-        onPress={() => navigation.navigate('FinishOnboarding')}
-      >
-        <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: fontSizes.body }}>Next</Text>
-      </TouchableOpacity>
+
+        {/* Continue Button */}
+        <TouchableOpacity
+          style={[styles.continueButton, { backgroundColor: theme.accent }]}
+          onPress={onNext}
+          activeOpacity={0.8}
+        >
+          <Text style={[styles.continueText, { color: '#fff' }]}>
+            Get Started
+          </Text>
+          <Ionicons name="arrow-forward" size={20} color="#fff" style={{ marginLeft: 8 }} />
+        </TouchableOpacity>
+      </ScrollView>
     </View>
   );
 }
@@ -50,32 +115,104 @@ export default function FeatureHighlightScreen({ navigation }: { navigation: any
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: colors.background,
-    padding: spacing.lg,
   },
-  headline: {
-    fontSize: 22,
+  scrollContent: {
+    flexGrow: 1,
+    paddingHorizontal: 24,
+    paddingVertical: 40,
+  },
+  header: {
+    alignItems: 'center',
+    marginBottom: 40,
+    paddingTop: 20,
+  },
+  title: {
+    fontSize: 32,
     fontWeight: 'bold',
-    color: colors.text,
-    marginBottom: spacing.xl,
+    marginBottom: 12,
     textAlign: 'center',
   },
-  featureRow: {
-    flexDirection: 'row',
+  subtitle: {
+    fontSize: 16,
+    textAlign: 'center',
+    lineHeight: 24,
+    paddingHorizontal: 20,
+  },
+  featuresContainer: {
+    marginBottom: 40,
+  },
+  featureCard: {
+    padding: 20,
+    borderRadius: 16,
+    marginBottom: 16,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  featureIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: spacing.lg,
-    width: '100%',
-    maxWidth: 340,
+    marginBottom: 16,
   },
   featureTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: colors.text,
+    marginBottom: 8,
   },
-  featureDesc: {
-    fontSize: fontSizes.body,
-    color: colors.textSecondary,
+  featureDescription: {
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  statsContainer: {
+    padding: 24,
+    borderRadius: 16,
+    marginBottom: 40,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  statsTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  statsGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  statItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  statNumber: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  statLabel: {
+    fontSize: 12,
+    textAlign: 'center',
+  },
+  continueButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    borderRadius: 28,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  continueText: {
+    fontSize: 18,
+    fontWeight: 'bold',
   },
 }); 

@@ -41,7 +41,8 @@ class LocalStorageClient:
             "ai_insights": [],
             "community_post_likes": [],
             "community_post_replies": [],
-            "video_shares": []
+            "video_shares": [],
+            "community_feature_feedback": []
         }
         self.next_ids = {table: 1 for table in self.data.keys()}
     
@@ -255,6 +256,14 @@ DATABASE_SCHEMA = {
             error_message TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+    """,
+    "community_feature_feedback": """
+        CREATE TABLE IF NOT EXISTS community_feature_feedback (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+            feature_id VARCHAR(100) NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
     """
 }

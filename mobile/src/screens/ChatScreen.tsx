@@ -11,35 +11,37 @@ import {
   Platform,
   FlatList,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { apiRequest } from '../utils/api';
-import { colors, spacing, fontSizes, cardStyle, buttonStyle } from '../styles/theme';
+import { sendChatMessage } from '../utils/openrouter';
+import { useTheme } from '../contexts/ThemeContext';
+import VoiceCallScreen from './VoiceCallScreen';
 
 interface ChatMessage {
   id: string;
   text: string;
   isUser: boolean;
   timestamp: Date;
+  isVoice?: boolean;
 }
 
 export default function ChatScreen({ navigation }: { navigation: any }) {
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: '1',
-      text: "Hi! I'm here to help you on your journey to healthier eating habits. How are you feeling today?",
+      text: "Hi! I'm your AI junk food assistant. I'm here to help you on your journey to healthier eating habits. How are you feeling today?",
       isUser: false,
       timestamp: new Date(),
     },
   ]);
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [guiltLevel, setGuiltLevel] = useState<number | null>(null);
-  const [regretLevel, setRegretLevel] = useState<number | null>(null);
-  const scrollViewRef = useRef<ScrollView>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [isVoiceCall, setIsVoiceCall] = useState(false);
+  const flatListRef = useRef<FlatList>(null);
+  const { theme } = useTheme();
 
   const sendMessage = async () => {
-    if (!inputText.trim()) return;
+    if (!inputText.trim() || isLoading) return;
 
     const userMessage: ChatMessage = {
       id: Date.now().toString(),
@@ -49,32 +51,38 @@ export default function ChatScreen({ navigation }: { navigation: any }) {
     };
 
     setMessages(prev => [...prev, userMessage]);
+    const currentInput = inputText;
     setInputText('');
     setIsLoading(true);
 
     try {
-      const response = await apiRequest('/api/chat', {
-        method: 'POST',
-        body: JSON.stringify({
-          message: inputText,
-          guilt_level: guiltLevel,
-          regret_level: regretLevel,
-        }),
-      });
-
+      const aiResponse = await sendChatMessage(currentInput);
       const aiMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
-        text: response.response,
+        text: aiResponse,
         isUser: false,
         timestamp: new Date(),
       };
-
       setMessages(prev => [...prev, aiMessage]);
     } catch (error) {
+      console.error('Chat error:', error);
       Alert.alert('Error', 'Failed to get response. Please try again.');
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const startVoiceCall = () => {
+    setIsVoiceCall(true);
+  };
+
+  const startVoiceRecording = () => {
+    setIsRecording(true);
+    // Simulate voice recording
+    setTimeout(() => {
+      setIsRecording(false);
+      Alert.alert('Voice Message', 'Voice recording feature is coming soon!');
+    }, 2000);
   };
 
   const quickResponses = [
@@ -90,7 +98,11 @@ export default function ChatScreen({ navigation }: { navigation: any }) {
   };
 
   useEffect(() => {
-    scrollViewRef.current?.scrollToEnd({ animated: true });
+    if (messages.length > 0) {
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+    }
   }, [messages]);
 
   const formatTime = (date: Date) => {
@@ -101,37 +113,156 @@ export default function ChatScreen({ navigation }: { navigation: any }) {
     });
   };
 
+  const renderMessage = ({ item }: { item: ChatMessage }) => (
+    <View style={[
+      styles.messageContainer,
+      item.isUser ? styles.userMessageContainer : styles.aiMessageContainer
+    ]}>
+      <View style={[
+        styles.messageBubble,
+        item.isUser ? [styles.userBubble, { backgroundColor: theme.accent }] : [styles.aiBubble, { backgroundColor: theme.cardBg }]
+      ]}>
+        {item.isVoice ? (
+          <View style={styles.voiceMessageContainer}>
+            <Ionicons name="play-circle" size={24} color={item.isUser ? '#fff' : theme.accent} />
+            <View style={styles.voiceWaveform}>
+              <View style={[styles.voiceBar, { backgroundColor: item.isUser ? '#fff' : theme.accent }]} />
+              <View style={[styles.voiceBar, { backgroundColor: item.isUser ? '#fff' : theme.accent }]} />
+              <View style={[styles.voiceBar, { backgroundColor: item.isUser ? '#fff' : theme.accent }]} />
+            </View>
+            <Text style={[styles.voiceDuration, { color: item.isUser ? 'rgba(255,255,255,0.8)' : theme.textSecondary }]}>
+              0:15
+            </Text>
+          </View>
+        ) : (
+          <Text style={[
+            styles.messageText,
+            item.isUser ? styles.userMessageText : { color: theme.text }
+          ]}>
+            {item.text}
+          </Text>
+        )}
+        <Text style={[
+          styles.messageTime,
+          item.isUser ? styles.userMessageTime : { color: theme.textSecondary }
+        ]}>
+          {formatTime(item.timestamp)}
+        </Text>
+      </View>
+    </View>
+  );
+
   return (
-    <View style={{ flex: 1, backgroundColor: colors.background }}>
-      <LinearGradient
-        colors={['#181c2f', '#23263a']}
-        style={{ paddingTop: spacing.xl, paddingBottom: spacing.md, alignItems: 'center', borderBottomLeftRadius: 24, borderBottomRightRadius: 24 }}
+    <View style={[styles.container, { backgroundColor: theme.background }]}>
+      <KeyboardAvoidingView 
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
       >
-        <Text style={{ color: colors.accent, fontSize: fontSizes.heading, fontWeight: 'bold', letterSpacing: 2 }}>Junk Stop</Text>
-        <Text style={{ color: colors.text, fontSize: fontSizes.body, marginTop: spacing.xs }}>Chat Support</Text>
-      </LinearGradient>
-      <FlatList
-        data={messages}
-        renderItem={({ item }) => (
-          <View style={[cardStyle, { marginVertical: spacing.xs, alignSelf: item.isUser ? 'flex-end' : 'flex-start', backgroundColor: item.isUser ? colors.accent : colors.card }]}> 
-            <Text style={{ color: item.isUser ? '#fff' : colors.text }}>{item.text}</Text>
+        {/* Enhanced Header with Voice Call */}
+        <View style={[styles.header, { backgroundColor: theme.cardBg }]}>
+          <View style={styles.headerContent}>
+            <View style={[styles.aiAvatar, { backgroundColor: theme.accent + '20' }]}>
+              <Ionicons name="chatbubble-ellipses" size={24} color={theme.accent} />
+            </View>
+            <View style={styles.headerText}>
+              <Text style={[styles.headerTitle, { color: theme.text }]}>AI Assistant</Text>
+              <Text style={[styles.headerSubtitle, { color: theme.textSecondary }]}>
+                {isLoading ? 'Typing...' : isVoiceCall ? 'Voice Call Active' : 'Online'}
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={[styles.voiceCallButton, { backgroundColor: isVoiceCall ? '#e74c3c' : theme.accent }]}
+              onPress={startVoiceCall}
+            >
+              <Ionicons 
+                name={isVoiceCall ? "call" : "call-outline"} 
+                size={20} 
+                color="#fff" 
+              />
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Messages */}
+        <FlatList
+          ref={flatListRef}
+          data={messages}
+          renderItem={renderMessage}
+          keyExtractor={item => item.id}
+          contentContainerStyle={styles.messagesList}
+          showsVerticalScrollIndicator={false}
+        />
+
+        {/* Quick Responses */}
+        {messages.length === 1 && (
+          <View style={styles.quickResponsesContainer}>
+            <Text style={[styles.quickResponsesTitle, { color: theme.textSecondary }]}>
+              Quick responses:
+            </Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.quickResponsesScroll}>
+              {quickResponses.map((response, index) => (
+                <TouchableOpacity
+                  key={index}
+                  style={[styles.quickResponseButton, { backgroundColor: theme.cardBg }]}
+                  onPress={() => sendQuickResponse(response)}
+                >
+                  <Text style={[styles.quickResponseText, { color: theme.text }]}>{response}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
           </View>
         )}
-        keyExtractor={item => item.id}
-        contentContainerStyle={{ padding: spacing.lg }}
+
+        {/* Modern Input Area */}
+        <View style={[styles.inputContainer, { backgroundColor: theme.background }]}>
+          <View style={[styles.inputWrapper, { backgroundColor: theme.cardBg }]}>
+            <TouchableOpacity
+              style={[styles.voiceButton, { backgroundColor: isRecording ? '#e74c3c' : theme.accent + '20' }]}
+              onPress={startVoiceRecording}
+            >
+              <Ionicons 
+                name={isRecording ? "stop" : "mic"} 
+                size={20} 
+                color={isRecording ? "#fff" : theme.accent} 
+              />
+            </TouchableOpacity>
+            
+            <View style={[styles.textInputContainer, { backgroundColor: theme.inputBg }]}>
+              <TextInput
+                style={[styles.textInput, { color: theme.text }]}
+                placeholder="Type your message..."
+                placeholderTextColor={theme.textSecondary}
+                value={inputText}
+                onChangeText={setInputText}
+                multiline
+                maxLength={500}
+              />
+            </View>
+            
+            <TouchableOpacity
+              style={[
+                styles.sendButton,
+                { backgroundColor: inputText.trim() && !isLoading ? theme.accent : theme.textSecondary }
+              ]}
+              onPress={sendMessage}
+              disabled={!inputText.trim() || isLoading}
+            >
+              {isLoading ? (
+                <Ionicons name="ellipsis-horizontal" size={20} color="#fff" />
+              ) : (
+                <Ionicons name="send" size={20} color="#fff" />
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </KeyboardAvoidingView>
+
+      {/* Voice Call Screen */}
+      <VoiceCallScreen
+        visible={isVoiceCall}
+        onClose={() => setIsVoiceCall(false)}
       />
-      <View style={{ flexDirection: 'row', alignItems: 'center', padding: spacing.md }}>
-        <TextInput
-          style={{ flex: 1, backgroundColor: colors.card, color: colors.text, borderRadius: 16, padding: spacing.sm, marginRight: spacing.sm }}
-          placeholder="Type your message..."
-          placeholderTextColor={colors.textSecondary}
-          value={inputText}
-          onChangeText={setInputText}
-        />
-        <TouchableOpacity style={[buttonStyle, { backgroundColor: colors.accent }]} onPress={sendMessage}>
-          <Text style={{ color: '#fff', fontWeight: 'bold' }}>Send</Text>
-        </TouchableOpacity>
-      </View>
     </View>
   );
 }
@@ -139,201 +270,158 @@ export default function ChatScreen({ navigation }: { navigation: any }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
   },
   header: {
-    paddingTop: 50,
-    paddingBottom: 20,
-    paddingHorizontal: 20,
+    paddingTop: 56,
+    paddingBottom: 16,
+    paddingHorizontal: 16,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+  },
+  headerContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
   },
-  backButton: {
-    padding: 5,
+  aiAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  headerText: {
+    flex: 1,
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: 'bold',
-    color: '#fff',
+    marginBottom: 2,
   },
-  headerRight: {
-    width: 34,
+  headerSubtitle: {
+    fontSize: 14,
   },
-  messagesContainer: {
-    flex: 1,
-    paddingHorizontal: 20,
-    paddingTop: 20,
+  voiceCallButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  messageWrapper: {
-    marginBottom: 15,
+  messagesList: {
+    paddingHorizontal: 16,
+    paddingVertical: 16,
   },
-  userMessageWrapper: {
+  messageContainer: {
+    marginBottom: 16,
+  },
+  userMessageContainer: {
     alignItems: 'flex-end',
   },
-  aiMessageWrapper: {
+  aiMessageContainer: {
     alignItems: 'flex-start',
   },
   messageBubble: {
     maxWidth: '80%',
-    borderRadius: 18,
+    borderRadius: 20,
     paddingHorizontal: 16,
     paddingVertical: 12,
   },
-  userMessage: {
-    backgroundColor: '#9b59b6',
+  userBubble: {
+    borderBottomRightRadius: 6,
   },
-  aiMessage: {
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
+  aiBubble: {
+    borderBottomLeftRadius: 6,
   },
   messageText: {
     fontSize: 16,
-    lineHeight: 20,
+    lineHeight: 22,
+    marginBottom: 4,
   },
   userMessageText: {
     color: '#fff',
   },
-  aiMessageText: {
-    color: '#333',
-  },
   messageTime: {
-    fontSize: 11,
-    marginTop: 4,
+    fontSize: 12,
+    alignSelf: 'flex-end',
   },
   userMessageTime: {
     color: 'rgba(255, 255, 255, 0.7)',
   },
-  aiMessageTime: {
-    color: '#999',
-  },
-  loadingMessage: {
-    alignItems: 'flex-start',
-    marginBottom: 15,
-  },
-  loadingDots: {
+  voiceMessageContainer: {
     flexDirection: 'row',
-    backgroundColor: '#fff',
-    borderRadius: 18,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
+    alignItems: 'center',
+    marginBottom: 4,
   },
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#ccc',
-    marginHorizontal: 2,
+  voiceWaveform: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 8,
   },
-  dot1: {
-    // Animation would be added here in a real implementation
+  voiceBar: {
+    width: 3,
+    height: 20,
+    marginHorizontal: 1,
+    borderRadius: 2,
   },
-  dot2: {
-    // Animation would be added here in a real implementation
-  },
-  dot3: {
-    // Animation would be added here in a real implementation
+  voiceDuration: {
+    fontSize: 12,
   },
   quickResponsesContainer: {
-    paddingVertical: 10,
+    paddingHorizontal: 16,
+    paddingBottom: 16,
   },
-  quickResponses: {
-    paddingHorizontal: 20,
+  quickResponsesTitle: {
+    fontSize: 14,
+    marginBottom: 8,
+  },
+  quickResponsesScroll: {
+    flexDirection: 'row',
   },
   quickResponseButton: {
-    backgroundColor: '#e8e8e8',
-    borderRadius: 20,
     paddingHorizontal: 16,
     paddingVertical: 8,
-    marginRight: 10,
+    borderRadius: 20,
+    marginRight: 8,
   },
   quickResponseText: {
     fontSize: 14,
-    color: '#333',
-  },
-  feelingsContainer: {
-    backgroundColor: '#fff',
-    margin: 20,
-    marginBottom: 10,
-    padding: 15,
-    borderRadius: 15,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-  },
-  feelingsLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 10,
-  },
-  feelingsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  feelingGroup: {
-    flex: 1,
-    marginHorizontal: 5,
-  },
-  feelingLabel: {
-    fontSize: 12,
-    color: '#666',
-    marginBottom: 5,
-  },
-  ratingButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  ratingButton: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: '#f0f0f0',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  selectedRating: {
-    backgroundColor: '#9b59b6',
-  },
-  ratingText: {
-    fontSize: 12,
-    color: '#666',
-  },
-  selectedRatingText: {
-    color: '#fff',
   },
   inputContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+  },
+  inputWrapper: {
     flexDirection: 'row',
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-    backgroundColor: '#fff',
     alignItems: 'flex-end',
+    borderRadius: 24,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    gap: 8,
   },
-  textInput: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-    borderRadius: 20,
-    paddingHorizontal: 15,
-    paddingVertical: 10,
-    marginRight: 10,
-    maxHeight: 100,
-    fontSize: 16,
-  },
-  sendButton: {
-    backgroundColor: '#9b59b6',
-    borderRadius: 20,
+  voiceButton: {
     width: 40,
     height: 40,
-    justifyContent: 'center',
+    borderRadius: 20,
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  sendButtonDisabled: {
-    backgroundColor: '#ccc',
+  textInputContainer: {
+    flex: 1,
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  textInput: {
+    fontSize: 16,
+    maxHeight: 100,
+    paddingVertical: 4,
+  },
+  sendButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });
