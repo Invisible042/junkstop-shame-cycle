@@ -80,6 +80,79 @@ async def generate_motivation(user_id: int, guilt_rating: int, regret_rating: in
     except Exception:
         return get_fallback_motivation(guilt_rating, regret_rating, total_logs_week)
 
+async def voice_chat_with_livekit_agent(
+    audio_base64: str,
+    user_id: int,
+    guilt_level: Optional[int] = None,
+    regret_level: Optional[int] = None,
+    message: Optional[str] = None
+) -> dict:
+    """
+    Handles AI voice chat using LiveKit Agent for STT and TTS.
+    Returns a dict with 'response_text' and 'audio_base64'.
+    """
+    LIVEKIT_AGENT_URL = os.getenv("LIVEKIT_AGENT_URL", "http://localhost:8080")
+    try:
+        # 1. Speech-to-Text (STT)
+        async with httpx.AsyncClient() as client:
+            stt_response = await client.post(
+                f"{LIVEKIT_AGENT_URL}/stt",
+                json={"audio_base64": audio_base64}
+            )
+            stt_response.raise_for_status()
+            stt_data = stt_response.json()
+            user_text = stt_data.get("text", "")
+        # Combine with optional message
+        if message:
+            user_text = f"{user_text}\n{message}" if user_text else message
+        # 2. Generate AI response
+        guilt = guilt_level if guilt_level is not None else 5
+        regret = regret_level if regret_level is not None else 5
+        ai_response_text = await generate_motivation(user_id, guilt, regret, user_text)
+        # 3. Text-to-Speech (TTS)
+        async with httpx.AsyncClient() as client:
+            tts_response = await client.post(
+                f"{LIVEKIT_AGENT_URL}/tts",
+                json={"text": ai_response_text}
+            )
+            tts_response.raise_for_status()
+            tts_data = tts_response.json()
+            ai_audio_base64 = tts_data.get("audio_base64")
+        return {
+            "response_text": ai_response_text,
+            "audio_base64": ai_audio_base64
+        }
+    except Exception as e:
+        raise RuntimeError(f"Voice chat with LiveKit Agent failed: {str(e)}")
+
+async def start_livekit_agent_session(user_id: str, room_name: str):
+    """
+    Starts a LiveKit Agent session for the given user and room using the livekit-agent SDK.
+    This should be called when a user joins a room to ensure the AI assistant joins as well.
+    """
+    try:
+        from livekit_agent import AgentSession, AgentConfig
+        import os
+        LIVEKIT_API_KEY = os.getenv("LIVEKIT_API_KEY")
+        LIVEKIT_API_SECRET = os.getenv("LIVEKIT_API_SECRET")
+        ws_url = os.getenv("LIVEKIT_WS_URL", "wss://your-livekit-server.com")
+        agent_identity = f"agent_{user_id}"
+        agent_config = AgentConfig(
+            ws_url=ws_url,
+            api_key=LIVEKIT_API_KEY,
+            api_secret=LIVEKIT_API_SECRET,
+            identity=agent_identity,
+            name="AI Assistant",
+            room_name=room_name,
+            # Add any additional config needed for your agent (e.g., STT/TTS/AI endpoints)
+        )
+        AgentSession.start(agent_config)
+        print(f"Started LiveKit Agent session for room {room_name} (user {user_id})")
+    except ImportError:
+        print("livekit-agent SDK not installed; skipping agent auto-start.")
+    except Exception as agent_exc:
+        print(f"Failed to start LiveKit Agent session: {agent_exc}")
+
 def get_fallback_motivation(guilt_rating: int, regret_rating: int, total_logs_week: int) -> str:
     """Fallback motivation messages when AI is not available"""
     

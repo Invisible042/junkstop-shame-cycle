@@ -6,55 +6,52 @@ import {
   TouchableOpacity,
   Alert,
   Modal,
+  FlatList,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
 import { liveKitService, LiveKitConfig } from '../services/LiveKitService';
-import { ConnectionState } from 'livekit-client';
-import { LIVEKIT_CONFIG, getDevelopmentToken } from '../config/livekit';
+import { ConnectionState, RemoteParticipant } from 'livekit-client';
+import { LIVEKIT_CONFIG, getLiveKitToken } from '../config/livekit';
 
 interface VoiceCallScreenProps {
   visible: boolean;
   onClose: () => void;
+  userId: number | null;
 }
 
-export default function VoiceCallScreen({ visible, onClose }: VoiceCallScreenProps) {
+export default function VoiceCallScreen({ visible, onClose, userId }: VoiceCallScreenProps) {
   const { theme } = useTheme();
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
-  const [callDuration, setCallDuration] = useState(0);
   const [participants, setParticipants] = useState<string[]>([]);
 
   useEffect(() => {
-    let interval: NodeJS.Timeout;
-    if (isConnected) {
-      interval = setInterval(() => {
-        setCallDuration(prev => prev + 1);
-      }, 1000);
-    }
-    return () => clearInterval(interval);
-  }, [isConnected]);
-
-  useEffect(() => {
     if (visible) {
+      if (!userId) {
+        Alert.alert('Authentication Error', 'You must be logged in to start a voice call.');
+        onClose();
+        return;
+      }
       startCall();
     } else {
       endCall();
     }
-  }, [visible]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, userId]);
 
   const startCall = async () => {
+    if (!userId) return;
     setIsConnecting(true);
     try {
-      // Use LiveKit configuration
+      const token = await getLiveKitToken(String(userId), LIVEKIT_CONFIG.roomName);
       const config: LiveKitConfig = {
         url: LIVEKIT_CONFIG.url,
-        token: getDevelopmentToken(), // Replace with actual token generation
+        token,
         roomName: LIVEKIT_CONFIG.roomName,
       };
 
-      // Set up event handlers
       liveKitService.setEventHandlers({
         onParticipantJoined: (participant) => {
           setParticipants(prev => [...prev, participant.identity]);
@@ -66,9 +63,15 @@ export default function VoiceCallScreen({ visible, onClose }: VoiceCallScreenPro
           if (state === ConnectionState.Connected) {
             setIsConnected(true);
             setIsConnecting(false);
+            // Add self to participants
+            setParticipants(prev => {
+              if (!prev.includes(String(userId))) return [String(userId), ...prev];
+              return prev;
+            });
           } else if (state === ConnectionState.Disconnected) {
             setIsConnected(false);
             setIsConnecting(false);
+            setParticipants([]);
             onClose();
           }
         },
@@ -92,8 +95,8 @@ export default function VoiceCallScreen({ visible, onClose }: VoiceCallScreenPro
     }
     setIsConnected(false);
     setIsConnecting(false);
-    setCallDuration(0);
     setParticipants([]);
+    onClose();
   };
 
   const toggleMute = async () => {
@@ -110,11 +113,19 @@ export default function VoiceCallScreen({ visible, onClose }: VoiceCallScreenPro
     }
   };
 
-  const formatDuration = (seconds: number): string => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  };
+  const renderParticipant = ({ item }: { item: string }) => (
+    <View style={styles.participantItem}>
+      <Ionicons
+        name={item.startsWith('agent_') ? 'robot' : 'person'}
+        size={20}
+        color={item.startsWith('agent_') ? theme.accent : theme.text}
+        style={{ marginRight: 8 }}
+      />
+      <Text style={{ color: theme.text }}>
+        {item.startsWith('agent_') ? 'AI Assistant' : item}
+      </Text>
+    </View>
+  );
 
   return (
     <Modal
@@ -122,91 +133,53 @@ export default function VoiceCallScreen({ visible, onClose }: VoiceCallScreenPro
       animationType="slide"
       presentationStyle="fullScreen"
     >
-      <View style={[styles.container, { backgroundColor: theme.background }]}>
+      <View style={[styles.container, { backgroundColor: theme.background }]}>        
         {/* Header */}
-        <View style={[styles.header, { backgroundColor: theme.cardBg }]}>
-          <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+        <View style={[styles.header, { backgroundColor: theme.cardBg }]}>          
+          <Text style={[styles.headerTitle, { color: theme.text }]}>Voice Call</Text>
+          <TouchableOpacity onPress={endCall} style={styles.closeButton}>
             <Ionicons name="close" size={24} color={theme.text} />
           </TouchableOpacity>
-          <Text style={[styles.headerTitle, { color: theme.text }]}>Voice Call</Text>
-          <View style={styles.headerSpacer} />
         </View>
 
         {/* Call Status */}
         <View style={styles.statusContainer}>
-          <View style={[styles.aiAvatar, { backgroundColor: theme.accent + '20' }]}>
-            <Ionicons name="chatbubble-ellipses" size={48} color={theme.accent} />
-          </View>
-          
-          <Text style={[styles.aiName, { color: theme.text }]}>AI Assistant</Text>
-          
-          <Text style={[styles.callStatus, { color: theme.textSecondary }]}>
+          <Text style={[styles.statusText, { color: theme.textSecondary }]}>            
             {isConnecting ? 'Connecting...' : isConnected ? 'Connected' : 'Disconnected'}
           </Text>
+        </View>
 
-          {isConnected && (
-            <Text style={[styles.callDuration, { color: theme.accent }]}>
-              {formatDuration(callDuration)}
-            </Text>
-          )}
-
-          {participants.length > 0 && (
-            <Text style={[styles.participantsText, { color: theme.textSecondary }]}>
-              {participants.length} participant(s) in call
-            </Text>
-          )}
+        {/* Participants */}
+        <View style={styles.participantsContainer}>
+          <Text style={[styles.participantsTitle, { color: theme.text }]}>Participants</Text>
+          <FlatList
+            data={participants}
+            renderItem={renderParticipant}
+            keyExtractor={item => item}
+            contentContainerStyle={styles.participantsList}
+          />
         </View>
 
         {/* Call Controls */}
-        <View style={styles.controlsContainer}>
-          <View style={styles.controlsRow}>
-            {/* Mute Button */}
-            <TouchableOpacity
-              style={[
-                styles.controlButton,
-                { backgroundColor: isMuted ? '#e74c3c' : theme.cardBg }
-              ]}
-              onPress={toggleMute}
-              disabled={!isConnected}
-            >
-              <Ionicons 
-                name={isMuted ? "mic-off" : "mic"} 
-                size={24} 
-                color={isMuted ? "#fff" : theme.accent} 
-              />
-            </TouchableOpacity>
+        <View style={styles.controlsRow}>
+          <TouchableOpacity
+            style={[styles.controlButton, { backgroundColor: isMuted ? '#e74c3c' : theme.cardBg }]}
+            onPress={toggleMute}
+            disabled={!isConnected}
+          >
+            <Ionicons
+              name={isMuted ? 'mic-off' : 'mic'}
+              size={24}
+              color={isMuted ? '#fff' : theme.accent}
+            />
+          </TouchableOpacity>
 
-            {/* End Call Button */}
-            <TouchableOpacity
-              style={[styles.endCallButton, { backgroundColor: '#e74c3c' }]}
-              onPress={endCall}
-            >
-              <Ionicons name="call" size={24} color="#fff" />
-            </TouchableOpacity>
-
-            {/* Speaker Button */}
-            <TouchableOpacity
-              style={[styles.controlButton, { backgroundColor: theme.cardBg }]}
-              onPress={() => Alert.alert('Speaker', 'Speaker toggle coming soon!')}
-              disabled={!isConnected}
-            >
-              <Ionicons name="volume-high" size={24} color={theme.accent} />
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Call Info */}
-        <View style={[styles.infoContainer, { backgroundColor: theme.cardBg }]}>
-          <Text style={[styles.infoTitle, { color: theme.text }]}>Voice Call Features</Text>
-          <Text style={[styles.infoText, { color: theme.textSecondary }]}>
-            • Real-time voice conversation with AI assistant
-          </Text>
-          <Text style={[styles.infoText, { color: theme.textSecondary }]}>
-            • Mute/unmute your microphone
-          </Text>
-          <Text style={[styles.infoText, { color: theme.textSecondary }]}>
-            • High-quality audio with LiveKit
-          </Text>
+          <TouchableOpacity
+            style={[styles.endCallButton, { backgroundColor: '#e74c3c' }]}
+            onPress={endCall}
+          >
+            <Ionicons name="call" size={24} color="#fff" />
+          </TouchableOpacity>
         </View>
       </View>
     </Modal>
@@ -225,55 +198,42 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
     paddingHorizontal: 16,
   },
-  closeButton: {
-    padding: 8,
-  },
   headerTitle: {
     fontSize: 18,
     fontWeight: 'bold',
   },
-  headerSpacer: {
-    width: 40,
+  closeButton: {
+    padding: 8,
   },
   statusContainer: {
-    flex: 1,
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 32,
+    marginVertical: 16,
   },
-  aiAvatar: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 24,
-  },
-  aiName: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 8,
-  },
-  callStatus: {
+  statusText: {
     fontSize: 16,
+  },
+  participantsContainer: {
+    marginHorizontal: 16,
     marginBottom: 16,
   },
-  callDuration: {
-    fontSize: 20,
+  participantsTitle: {
+    fontSize: 16,
     fontWeight: 'bold',
     marginBottom: 8,
   },
-  participantsText: {
-    fontSize: 14,
+  participantsList: {
+    paddingBottom: 8,
   },
-  controlsContainer: {
-    paddingHorizontal: 32,
-    paddingBottom: 32,
+  participantItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
   },
   controlsRow: {
     flexDirection: 'row',
     justifyContent: 'space-around',
     alignItems: 'center',
+    marginTop: 32,
   },
   controlButton: {
     width: 60,
@@ -288,19 +248,5 @@ const styles = StyleSheet.create({
     borderRadius: 40,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  infoContainer: {
-    margin: 16,
-    padding: 16,
-    borderRadius: 12,
-  },
-  infoTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 8,
-  },
-  infoText: {
-    fontSize: 14,
-    marginBottom: 4,
   },
 }); 

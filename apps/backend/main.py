@@ -21,10 +21,11 @@ from models import *
 from postgres_client import db_client
 from auth import get_current_user, create_access_token, verify_password, get_password_hash
 from storage import upload_image, delete_image
-from ai_coach import generate_motivation, analyze_patterns, estimate_calories
+from ai_coach import generate_motivation, analyze_patterns, estimate_calories, start_livekit_agent_session
 from database import get_supabase_client
 from gamification import GamificationService
 from collections import Counter
+import httpx
 
 load_dotenv()
 
@@ -604,6 +605,69 @@ async def chat_with_ai(message: ChatMessage, current_user: dict = Depends(get_cu
         return {"response": response, "timestamp": datetime.utcnow().isoformat()}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/ai/context")
+async def get_ai_user_context(user_id: int):
+    """
+    Returns user context for AI agent (e.g., guilt/regret levels, recent logs).
+    """
+    try:
+        # Get recent logs
+        logs = db_client.execute_query(
+            "SELECT * FROM junk_food_logs WHERE user_id = %s ORDER BY created_at DESC LIMIT 10",
+            (user_id,)
+        )
+        if not logs:
+            return {"recent_logs": [], "avg_guilt": 0, "avg_regret": 0}
+        avg_guilt = sum([log.get("guilt_rating", 0) for log in logs]) / len(logs)
+        avg_regret = sum([log.get("regret_rating", 0) for log in logs]) / len(logs)
+        return {
+            "recent_logs": logs,
+            "avg_guilt": avg_guilt,
+            "avg_regret": avg_regret
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch user context: {str(e)}")
+
+@app.post("/api/ai/voice-chat", response_model=AudioChatResponse)
+async def voice_chat_with_ai(request: AudioChatRequest, current_user: dict = Depends(get_current_user)):
+    """
+    Accepts a base64-encoded audio input, uses LiveKit Agent for STT and TTS, and returns AI response as text and audio.
+    """
+    LIVEKIT_AGENT_URL = os.getenv("LIVEKIT_AGENT_URL", "http://localhost:8080")
+    try:
+        # 1. Speech-to-Text (STT) using LiveKit Agent
+        async with httpx.AsyncClient() as client:
+            stt_response = await client.post(
+                f"{LIVEKIT_AGENT_URL}/stt",
+                json={"audio_base64": request.audio_base64}
+            )
+            stt_response.raise_for_status()
+            stt_data = stt_response.json()
+            user_text = stt_data.get("text", "")
+        # Combine with optional message
+        if request.message:
+            user_text = f"{user_text}\n{request.message}"
+        # 2. Generate AI response (reuse generate_motivation or similar logic)
+        guilt = request.guilt_level if request.guilt_level is not None else 5
+        regret = request.regret_level if request.regret_level is not None else 5
+        ai_response_text = await generate_motivation(current_user["id"], guilt, regret, user_text)
+        # 3. Text-to-Speech (TTS) using LiveKit Agent
+        async with httpx.AsyncClient() as client:
+            tts_response = await client.post(
+                f"{LIVEKIT_AGENT_URL}/tts",
+                json={"text": ai_response_text}
+            )
+            tts_response.raise_for_status()
+            tts_data = tts_response.json()
+            ai_audio_base64 = tts_data.get("audio_base64")
+        return AudioChatResponse(
+            response_text=ai_response_text,
+            audio_base64=ai_audio_base64,
+            timestamp=datetime.utcnow().isoformat()
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Voice chat failed: {str(e)}")
 
 # Community endpoints
 @app.get("/api/community/posts")
@@ -1299,6 +1363,45 @@ async def reset_test_user(current_user: dict = Depends(get_current_user)):
     except Exception as e:
         print(f"Error resetting user: {e}")
         raise HTTPException(status_code=500, detail="Failed to reset user")
+
+# LiveKit token generation endpoint
+@app.post("/api/livekit/token")
+async def generate_livekit_token(
+    user_id: str = Body(...),
+    room_name: str = Body(...),
+    is_agent: bool = Body(False)
+):
+    """
+    Generate a LiveKit access token for a user or agent to join a room.
+    Also automatically starts a LiveKit Agent session for the room (if not already running) when a user joins.
+    """
+    try:
+        from livekit import AccessToken, VideoGrant
+        import os
+        LIVEKIT_API_KEY = os.getenv("LIVEKIT_API_KEY")
+        LIVEKIT_API_SECRET = os.getenv("LIVEKIT_API_SECRET")
+        if not LIVEKIT_API_KEY or not LIVEKIT_API_SECRET:
+            raise HTTPException(status_code=500, detail="LiveKit API credentials not set")
+        identity = user_id if not is_agent else f"agent_{user_id}"
+        grant = VideoGrant(room=room_name, room_join=True, can_publish=True, can_subscribe=True)
+        token = AccessToken(
+            LIVEKIT_API_KEY,
+            LIVEKIT_API_SECRET,
+            identity=identity,
+            name=f"{'AI Agent' if is_agent else 'User'} {user_id}"
+        )
+        token.add_grant(grant)
+        jwt = token.to_jwt()
+
+        # Automatically start the agent session for this room if this is a user token
+        if not is_agent:
+            await start_livekit_agent_session(user_id, room_name)
+
+        return {"token": jwt}
+    except ImportError:
+        raise HTTPException(status_code=500, detail="livekit-server-sdk is not installed. Run 'pip install livekit-server-sdk'.")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate LiveKit token: {str(e)}")
 
 if __name__ == "__main__":
     print("Starting JunkStop FastAPI backend server...")

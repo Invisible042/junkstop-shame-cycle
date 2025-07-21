@@ -15,6 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { sendChatMessage } from '../utils/openrouter';
 import { useTheme } from '../contexts/ThemeContext';
 import VoiceCallScreen from './VoiceCallScreen';
+import { useAuth } from '../contexts/AuthContext';
 
 interface ChatMessage {
   id: string;
@@ -39,6 +40,10 @@ export default function ChatScreen({ navigation }: { navigation: any }) {
   const [isVoiceCall, setIsVoiceCall] = useState(false);
   const flatListRef = useRef<FlatList>(null);
   const { theme } = useTheme();
+  const { user } = useAuth(); // Get user from AuthContext
+
+  // TODO: Replace with actual user ID from auth context
+  const userId = 'user123';
 
   const sendMessage = async () => {
     if (!inputText.trim() || isLoading) return;
@@ -73,6 +78,10 @@ export default function ChatScreen({ navigation }: { navigation: any }) {
   };
 
   const startVoiceCall = () => {
+    if (!user) {
+      Alert.alert('Please Log In', 'You must be logged in to start a voice call.');
+      return;
+    }
     setIsVoiceCall(true);
   };
 
@@ -262,6 +271,7 @@ export default function ChatScreen({ navigation }: { navigation: any }) {
       <VoiceCallScreen
         visible={isVoiceCall}
         onClose={() => setIsVoiceCall(false)}
+        userId={user?.id}
       />
     </View>
   );

@@ -109,3 +109,18 @@ class VideoShareResponse(BaseModel):
     error_message: Optional[str] = None
     created_at: str
     updated_at: str
+
+# Audio Chat models for voice chat integration
+from pydantic import BaseModel
+from typing import Optional
+
+class AudioChatRequest(BaseModel):
+    audio_base64: str  # Audio input from user, base64-encoded (e.g., WAV/OGG/MP3)
+    guilt_level: Optional[int] = None
+    regret_level: Optional[int] = None
+    message: Optional[str] = None  # Optionally, user can send text as well
+
+class AudioChatResponse(BaseModel):
+    response_text: str  # AI-generated response (text)
+    audio_base64: Optional[str] = None  # Synthesized speech (base64-encoded audio)
+    timestamp: str

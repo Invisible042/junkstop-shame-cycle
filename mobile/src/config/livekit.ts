@@ -8,12 +8,12 @@ export const LIVEKIT_CONFIG = {
   // Room name for the AI assistant
   roomName: 'junk-food-assistant',
   
-  // Token generation endpoint (you'll need to implement this on your backend)
-  tokenEndpoint: 'https://your-backend.com/api/livekit/token',
+  // Token generation endpoint (should match backend)
+  tokenEndpoint: 'http://localhost:8000/api/livekit/token', // Update this to your backend URL in production
 };
 
 // Helper function to get LiveKit token from your backend
-export const getLiveKitToken = async (userId: string, roomName: string): Promise<string> => {
+export const getLiveKitToken = async (userId: string, roomName: string, isAgent: boolean = false): Promise<string> => {
   try {
     const response = await fetch(LIVEKIT_CONFIG.tokenEndpoint, {
       method: 'POST',
@@ -21,8 +21,9 @@ export const getLiveKitToken = async (userId: string, roomName: string): Promise
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        userId,
-        roomName,
+        user_id: userId,
+        room_name: roomName,
+        is_agent: isAgent,
       }),
     });
 
@@ -36,10 +37,4 @@ export const getLiveKitToken = async (userId: string, roomName: string): Promise
     console.error('Error getting LiveKit token:', error);
     throw error;
   }
-};
-
-// For development/testing, you can use a placeholder token
-export const getDevelopmentToken = (): string => {
-  // This is just for development - replace with actual token generation
-  return 'placeholder-token-for-development';
 }; 

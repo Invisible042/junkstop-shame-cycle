@@ -339,3 +339,109 @@ Currently no rate limiting is implemented, but it's recommended for production d
 - CORS is enabled for all origins (configure for production)
 - File uploads are validated for type and size
 - SQL queries use parameterized statements to prevent injection
+
+---
+
+## AI Voice Chat Endpoint (LiveKit Agent Integration)
+
+### POST `/api/ai/voice-chat`
+
+**Description:**
+Accepts a base64-encoded audio input, uses LiveKit Agent (>=1.0) for speech-to-text (STT) and text-to-speech (TTS), and returns the AI response as both text and synthesized audio.
+
+**Request Body:** (`AudioChatRequest`)
+```json
+{
+  "audio_base64": "<base64-encoded audio>",
+  "guilt_level": 5,           // optional, integer 0-10
+  "regret_level": 5,          // optional, integer 0-10
+  "message": "optional text"  // optional, additional user message
+}
+```
+
+**Response:** (`AudioChatResponse`)
+```json
+{
+  "response_text": "AI-generated motivational message",
+  "audio_base64": "<base64-encoded synthesized audio>",
+  "timestamp": "2024-07-01T12:34:56.789Z"
+}
+```
+
+**How it works:**
+1. The endpoint receives a base64-encoded audio file (e.g., WAV/OGG/MP3).
+2. It sends the audio to the LiveKit Agent `/stt` endpoint for speech-to-text.
+3. The recognized text (optionally combined with a user message) is sent to the AI coach for a motivational response.
+4. The AI response text is sent to the LiveKit Agent `/tts` endpoint for speech synthesis.
+5. The endpoint returns both the AI response text and the synthesized audio (base64-encoded).
+
+**Environment Variable:**
+- `LIVEKIT_AGENT_URL` (default: `http://localhost:8080`)
+
+**Example cURL:**
+```bash
+curl -X POST https://your-backend.com/api/ai/voice-chat \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "audio_base64": "...",
+    "guilt_level": 7,
+    "regret_level": 8
+  }'
+```
+
+---
+
+## LiveKit Token Generation Endpoint
+
+### POST `/api/livekit/token`
+
+**Description:**
+Generates a LiveKit access token for a user or AI agent to join a LiveKit room. Every participant (human or agent) must use a unique token to join a room.
+
+**Request Body:**
+```json
+{
+  "user_id": "string",      // required, unique user or agent identifier
+  "room_name": "string",    // required, LiveKit room name
+  "is_agent": false          // optional, set true for AI agent
+}
+```
+
+**Response:**
+```json
+{
+  "token": "<jwt-token>"
+}
+```
+
+**How to Use:**
+- **Human user:**
+  - Set `is_agent` to `false` (or omit).
+  - Use the returned token to join the room from the frontend/mobile app.
+- **AI agent:**
+  - Set `is_agent` to `true`.
+  - Use the returned token for the agent process to join the room as the AI assistant.
+
+**Example cURL:**
+```bash
+curl -X POST https://your-backend.com/api/livekit/token \
+  -H "Content-Type: application/json" \
+  -d '{
+    "user_id": "user123",
+    "room_name": "junkstop-room-1"
+  }'
+
+curl -X POST https://your-backend.com/api/livekit/token \
+  -H "Content-Type: application/json" \
+  -d '{
+    "user_id": "user123",
+    "room_name": "junkstop-room-1",
+    "is_agent": true
+  }'
+```
+
+**Environment Variables:**
+- `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` must be set in your backend environment.
+
+---
